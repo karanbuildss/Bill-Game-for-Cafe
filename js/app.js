@@ -4,6 +4,7 @@ const winSound = document.getElementById("winSound");
 
 let players = ["", ""];
 let billAmount = "";
+let lastPlayedGame = "";
 
 function playTap() {
   if (!tapSound) return;
@@ -27,11 +28,11 @@ function showWelcome() {
 
 function showPlayerSetup(error = "") {
   setScreen(`
-    <div class="panel">
+    <div class="panel setup-panel">
       <h2>Player Setup</h2>
       <p>Add at least two players and enter the bill amount.</p>
 
-      <div id="playerInputs">
+      <div id="playerInputs" class="player-input-list">
         ${players.map((name, index) => `
           <input 
             type="text" 
@@ -90,8 +91,8 @@ function showGameSelect() {
 
       ${gameButton("Spin Wheel", "Color wheel decides who pays.", "showSpinWheel")}
       ${gameButton("Finger Chooser", "Place fingers on screen and randomly choose payer.", "showFingerChooser")}
-      ${gameButton("Dice Roll", "Highest dice roll pays the bill.", "showPlaceholderResult")}
-      ${gameButton("Plinko Board", "Drop a ball and let luck decide.", "showPlaceholderResult")}
+      ${gameButton("Dice Roll", "Highest dice roll pays the bill.", "showDiceRoll")}
+      ${gameButton("Plinko Board", "Drop a ball and let luck decide.", "showPlinkoBoard")}
 
       <button class="secondary" onclick="playTap(); showPlayerSetup()">Edit Players</button>
     </div>
@@ -107,6 +108,14 @@ function gameButton(title, desc, action) {
 
   if (action === "showFingerChooser") {
     clickAction = "showFingerChooser()";
+  }
+
+  if (action === "showDiceRoll") {
+    clickAction = "showDiceRoll()";
+  }
+
+  if (action === "showPlinkoBoard") {
+    clickAction = "showPlinkoBoard()";
   }
 
   return `
@@ -131,16 +140,43 @@ function showPlaceholderResult(gameName) {
 }
 
 function showResult(payer, gameName) {
+  lastPlayedGame = gameName;
+
   setScreen(`
     <div class="panel">
       <h2>${payer} Pays!</h2>
       <p>${gameName} selected the payer.</p>
       <p>Bill Amount: Rs. ${billAmount}</p>
 
+      <button onclick="playTap(); playAgain()">Play Again</button>
       <button onclick="playTap(); showGameSelect()">Change Game</button>
       <button class="secondary" onclick="playTap(); showPlayerSetup()">Reset Players</button>
     </div>
   `);
+}
+
+function playAgain() {
+  if (lastPlayedGame === "Spin Wheel") {
+    showSpinWheel();
+    return;
+  }
+
+  if (lastPlayedGame === "Finger Chooser") {
+    showFingerChooser();
+    return;
+  }
+
+  if (lastPlayedGame === "Dice Roll") {
+    showDiceRoll();
+    return;
+  }
+
+  if (lastPlayedGame === "Plinko Board") {
+    showPlinkoBoard();
+    return;
+  }
+
+  showGameSelect();
 }
 
 let wheelAngle = 0;
@@ -331,6 +367,572 @@ function normalizeAngle(angle) {
 
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
+}
+
+let dicePlayers = [];
+let diceScores = [];
+let diceCurrentIndex = 0;
+let diceIsRolling = false;
+
+const diceFaceRotations = {
+  1: "rotateX(0deg) rotateY(0deg)",
+  2: "rotateX(0deg) rotateY(-90deg)",
+  3: "rotateX(-90deg) rotateY(0deg)",
+  4: "rotateX(90deg) rotateY(0deg)",
+  5: "rotateX(0deg) rotateY(90deg)",
+  6: "rotateX(0deg) rotateY(180deg)"
+};
+
+function showDiceRoll(roundPlayers = players, message = "Highest roll pays the bill.") {
+  dicePlayers = [...roundPlayers];
+  diceScores = [];
+  diceCurrentIndex = 0;
+  diceIsRolling = false;
+
+  setScreen(`
+    <div class="panel dice-panel">
+      <h2>Dice Roll</h2>
+      <p id="diceMessage">${message}</p>
+
+      <div id="diceTurn" class="dice-turn">${dicePlayers[0]}'s turn</div>
+
+      <div class="dice-scene" onclick="rollDiceForPlayer()">
+        <div id="gameDice" class="game-dice">
+          ${getDiceFacesHtml()}
+        </div>
+      </div>
+
+      <div id="diceValue" class="dice-value">Tap dice or button to roll</div>
+      <div id="diceScoreboard" class="dice-scoreboard"></div>
+
+      <button id="diceRollBtn" onclick="rollDiceForPlayer()">Roll Dice</button>
+      <button class="secondary" onclick="playTap(); showGameSelect()">Back</button>
+    </div>
+  `);
+
+  renderDiceScoreboard();
+}
+
+function getDiceFacesHtml() {
+  return `
+    <div class="dice-face dice-front">
+      <span class="dice-dot dice-center"></span>
+    </div>
+    <div class="dice-face dice-right">
+      <span class="dice-dot dice-top-left"></span>
+      <span class="dice-dot dice-bottom-right"></span>
+    </div>
+    <div class="dice-face dice-top">
+      <span class="dice-dot dice-top-left"></span>
+      <span class="dice-dot dice-center"></span>
+      <span class="dice-dot dice-bottom-right"></span>
+    </div>
+    <div class="dice-face dice-bottom">
+      <span class="dice-dot dice-top-left"></span>
+      <span class="dice-dot dice-top-right"></span>
+      <span class="dice-dot dice-bottom-left"></span>
+      <span class="dice-dot dice-bottom-right"></span>
+    </div>
+    <div class="dice-face dice-left">
+      <span class="dice-dot dice-top-left"></span>
+      <span class="dice-dot dice-top-right"></span>
+      <span class="dice-dot dice-center"></span>
+      <span class="dice-dot dice-bottom-left"></span>
+      <span class="dice-dot dice-bottom-right"></span>
+    </div>
+    <div class="dice-face dice-back">
+      <span class="dice-dot dice-top-left"></span>
+      <span class="dice-dot dice-top-right"></span>
+      <span class="dice-dot dice-middle-left"></span>
+      <span class="dice-dot dice-middle-right"></span>
+      <span class="dice-dot dice-bottom-left"></span>
+      <span class="dice-dot dice-bottom-right"></span>
+    </div>
+  `;
+}
+
+function rollDiceForPlayer() {
+  if (diceIsRolling || diceCurrentIndex >= dicePlayers.length) return;
+
+  playTap();
+  diceIsRolling = true;
+
+  const dice = document.getElementById("gameDice");
+  const rollBtn = document.getElementById("diceRollBtn");
+  const diceValue = document.getElementById("diceValue");
+  const currentPlayer = dicePlayers[diceCurrentIndex];
+  const value = Math.floor(Math.random() * 6) + 1;
+  const tumbleTime = 850 + Math.floor(Math.random() * 550);
+  const settleTime = 800 + Math.floor(Math.random() * 280);
+  const extraX = 360 * (2 + Math.floor(Math.random() * 4));
+  const extraY = 360 * (2 + Math.floor(Math.random() * 4));
+
+  rollBtn.disabled = true;
+  diceValue.textContent = `${currentPlayer} is rolling...`;
+  dice.classList.add("rolling");
+  dice.style.animationDuration = `${360 + Math.floor(Math.random() * 260)}ms`;
+
+  setTimeout(() => {
+    dice.classList.remove("rolling");
+    dice.style.transitionDuration = `${settleTime}ms`;
+    dice.style.transform = `${diceFaceRotations[value]} rotateX(${extraX}deg) rotateY(${extraY}deg) scale(1.08)`;
+
+    setTimeout(() => {
+      diceScores.push({ name: currentPlayer, value });
+      diceValue.textContent = `${currentPlayer} rolled ${value}`;
+      diceCurrentIndex += 1;
+      diceIsRolling = false;
+      rollBtn.disabled = false;
+
+      renderDiceScoreboard();
+
+      if (diceCurrentIndex < dicePlayers.length) {
+        document.getElementById("diceTurn").textContent = `${dicePlayers[diceCurrentIndex]}'s turn`;
+      } else {
+        finishDiceRound();
+      }
+    }, settleTime);
+  }, tumbleTime);
+}
+
+function renderDiceScoreboard() {
+  const scoreboard = document.getElementById("diceScoreboard");
+  if (!scoreboard) return;
+
+  scoreboard.innerHTML = dicePlayers.map(player => {
+    const score = diceScores.find(item => item.name === player);
+    return `
+      <div class="dice-score-row">
+        <span>${player}</span>
+        <strong>${score ? score.value : "-"}</strong>
+      </div>
+    `;
+  }).join("");
+}
+
+function finishDiceRound() {
+  const rollBtn = document.getElementById("diceRollBtn");
+  const diceTurn = document.getElementById("diceTurn");
+  const diceMessage = document.getElementById("diceMessage");
+  const highest = Math.max(...diceScores.map(score => score.value));
+  const winners = diceScores.filter(score => score.value === highest);
+
+  rollBtn.disabled = false;
+
+  if (winners.length > 1) {
+    const tiedPlayers = winners.map(score => score.name);
+    diceTurn.textContent = "Tie!";
+    diceMessage.textContent = `${tiedPlayers.join(", ")} tied with ${highest}. Roll again.`;
+    rollBtn.textContent = "Roll Tie Breaker";
+    rollBtn.onclick = function () {
+      playTap();
+      showDiceRoll(tiedPlayers, "Tie breaker round. Highest roll pays.");
+    };
+    return;
+  }
+
+  const payer = winners[0].name;
+  diceTurn.textContent = `${payer} pays!`;
+  diceMessage.textContent = `${payer} rolled the highest number.`;
+  rollBtn.textContent = "Continue";
+  rollBtn.onclick = function () {
+    playTap();
+    showResult(payer, "Dice Roll");
+  };
+
+  if (winSound) winSound.play().catch(() => {});
+}
+
+let plinkoCanvas = null;
+let plinkoCtx = null;
+let plinkoPegs = [];
+let plinkoSlots = [];
+let plinkoSlotPlayers = [];
+let plinkoBall = null;
+let plinkoDropping = false;
+let plinkoLastTime = 0;
+let plinkoAnimationFrame = null;
+const plinkoRows = 9;
+
+function showPlinkoBoard() {
+  stopPlinkoBoard();
+  plinkoSlotPlayers = [...players];
+
+  setScreen(`
+    <div class="panel plinko-panel">
+      <h2>Plinko Board</h2>
+      <p>Drop the ball and let the slot decide who pays.</p>
+
+      <div class="plinko-board-wrap">
+        <canvas id="plinkoCanvas"></canvas>
+      </div>
+
+      <div id="plinkoResult" class="plinko-result">Ready to drop</div>
+
+      <button id="plinkoDropBtn" onclick="dropPlinkoBall()">Drop Ball</button>
+      <button class="secondary" onclick="playTap(); stopPlinkoBoard(); showGameSelect()">Back</button>
+    </div>
+  `);
+
+  plinkoCanvas = document.getElementById("plinkoCanvas");
+  plinkoCtx = plinkoCanvas.getContext("2d");
+  plinkoCanvas.addEventListener("click", dropPlinkoBall);
+  setupPlinkoCanvas();
+}
+
+function setupPlinkoCanvas() {
+  const rect = plinkoCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+
+  plinkoCanvas.width = rect.width * dpr;
+  plinkoCanvas.height = rect.height * dpr;
+  plinkoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  createPlinkoBoard();
+  drawPlinkoBoard();
+}
+
+function createPlinkoBoard() {
+  const width = plinkoCanvas.clientWidth;
+  const height = plinkoCanvas.clientHeight;
+  const top = height * 0.11;
+  const rowGap = height * 0.07;
+  const boardLeft = width * 0.09;
+  const boardRight = width * 0.91;
+  const maxPegCount = plinkoRows + 1;
+  const pegGap = (boardRight - boardLeft) / (maxPegCount - 1);
+
+  plinkoPegs = [];
+
+  for (let row = 0; row < plinkoRows; row += 1) {
+    const count = row + 2;
+    const rowWidth = (count - 1) * pegGap;
+    const startX = width / 2 - rowWidth / 2;
+    const y = top + row * rowGap;
+
+    for (let col = 0; col < count; col += 1) {
+      plinkoPegs.push({
+        x: startX + col * pegGap,
+        y,
+        radius: Math.max(3.6, width * 0.01)
+      });
+    }
+  }
+
+  createPlinkoSlots();
+}
+
+function createPlinkoSlots() {
+  const width = plinkoCanvas.clientWidth;
+  const height = plinkoCanvas.clientHeight;
+  const slotWidth = width / plinkoSlotPlayers.length;
+  const slotY = height * 0.86;
+  const slotHeight = height * 0.105;
+
+  plinkoSlots = plinkoSlotPlayers.map((player, index) => ({
+    player,
+    x: index * slotWidth,
+    y: slotY,
+    width: slotWidth,
+    height: slotHeight,
+    centerX: index * slotWidth + slotWidth / 2
+  }));
+}
+
+function drawPlinkoBoard() {
+  const width = plinkoCanvas.clientWidth;
+  const height = plinkoCanvas.clientHeight;
+
+  plinkoCtx.clearRect(0, 0, width, height);
+  drawPlinkoBackground(width, height);
+  drawPlinkoPegs();
+  drawPlinkoSlots();
+
+  if (plinkoBall) {
+    drawPlinkoBall(plinkoBall.x, plinkoBall.y, plinkoBall.radius);
+  }
+}
+
+function drawPlinkoBackground(width, height) {
+  plinkoCtx.save();
+  plinkoCtx.fillStyle = "rgba(255, 61, 242, 0.08)";
+  plinkoCtx.beginPath();
+  drawRoundRect(plinkoCtx, width * 0.07, height * 0.08, width * 0.86, height * 0.78, 22);
+  plinkoCtx.fill();
+  plinkoCtx.strokeStyle = "rgba(0, 255, 200, 0.22)";
+  plinkoCtx.lineWidth = 2;
+  plinkoCtx.stroke();
+  plinkoCtx.restore();
+}
+
+function drawPlinkoPegs() {
+  plinkoPegs.forEach(peg => {
+    plinkoCtx.save();
+    plinkoCtx.shadowColor = "#ffffff";
+    plinkoCtx.shadowBlur = 10;
+    plinkoCtx.fillStyle = "#ffffff";
+    plinkoCtx.beginPath();
+    plinkoCtx.arc(peg.x, peg.y, peg.radius, 0, Math.PI * 2);
+    plinkoCtx.fill();
+    plinkoCtx.restore();
+  });
+}
+
+function drawPlinkoSlots() {
+  const colors = ["#ff1744", "#ff9100", "#ffea00", "#00e676", "#00b0ff", "#651fff", "#f50057"];
+
+  plinkoSlots.forEach((slot, index) => {
+    plinkoCtx.save();
+    plinkoCtx.fillStyle = colors[index % colors.length];
+    plinkoCtx.shadowColor = colors[index % colors.length];
+    plinkoCtx.shadowBlur = 14;
+    plinkoCtx.beginPath();
+    drawRoundRect(plinkoCtx, slot.x + 4, slot.y, slot.width - 8, slot.height, 10);
+    plinkoCtx.fill();
+    plinkoCtx.restore();
+
+    plinkoCtx.save();
+    plinkoCtx.fillStyle = index === 2 ? "#05060c" : "#ffffff";
+    plinkoCtx.font = "700 12px Arial";
+    plinkoCtx.textAlign = "center";
+    plinkoCtx.textBaseline = "middle";
+    plinkoCtx.fillText(trimPlinkoName(slot.player), slot.centerX, slot.y + slot.height / 2);
+    plinkoCtx.restore();
+  });
+}
+
+function drawPlinkoBall(x, y, radius) {
+  const gradient = plinkoCtx.createRadialGradient(x - radius * 0.4, y - radius * 0.4, 2, x, y, radius);
+  gradient.addColorStop(0, "#ffffff");
+  gradient.addColorStop(0.45, "#00ffc8");
+  gradient.addColorStop(1, "#008f84");
+
+  plinkoCtx.save();
+  plinkoCtx.shadowColor = "#00ffc8";
+  plinkoCtx.shadowBlur = 18;
+  plinkoCtx.fillStyle = gradient;
+  plinkoCtx.beginPath();
+  plinkoCtx.arc(x, y, radius, 0, Math.PI * 2);
+  plinkoCtx.fill();
+  plinkoCtx.restore();
+}
+
+function dropPlinkoBall() {
+  if (plinkoDropping) return;
+
+  playTap();
+  plinkoDropping = true;
+
+  const result = document.getElementById("plinkoResult");
+  const dropBtn = document.getElementById("plinkoDropBtn");
+  const width = plinkoCanvas.clientWidth;
+  const height = plinkoCanvas.clientHeight;
+
+  result.textContent = "Dropping...";
+  dropBtn.disabled = true;
+
+  plinkoSlotPlayers = shufflePlinkoArray(players);
+  createPlinkoSlots();
+
+  plinkoBall = {
+    x: width / 2 + plinkoRandomBetween(-14, 14),
+    y: height * 0.045,
+    radius: Math.max(9, width * 0.028),
+    vx: plinkoRandomBetween(-1.6, 1.6),
+    vy: 0,
+    settledFrames: 0,
+    stuckFrames: 0,
+    lastX: width / 2,
+    lastY: height * 0.045,
+    payer: ""
+  };
+
+  plinkoLastTime = performance.now();
+  plinkoAnimationFrame = requestAnimationFrame(animatePlinkoDrop);
+}
+
+function animatePlinkoDrop(now) {
+  const delta = Math.min((now - plinkoLastTime) / 16.67, 2.4);
+  plinkoLastTime = now;
+
+  updatePlinkoPhysics(delta);
+  drawPlinkoBoard();
+
+  if (plinkoDropping) {
+    plinkoAnimationFrame = requestAnimationFrame(animatePlinkoDrop);
+  } else {
+    finishPlinkoDrop();
+  }
+}
+
+function updatePlinkoPhysics(delta) {
+  const height = plinkoCanvas.clientHeight;
+  const slotTop = height * 0.86;
+  const subSteps = 5;
+  const step = delta / subSteps;
+
+  for (let i = 0; i < subSteps; i += 1) {
+    plinkoBall.vy += 0.22 * step;
+    plinkoBall.x += plinkoBall.vx * step;
+    plinkoBall.y += plinkoBall.vy * step;
+
+    keepPlinkoBallInsideWalls();
+    collidePlinkoBallWithPegs();
+    preventStuckPlinkoBall();
+    slowPlinkoBallNearSlots(slotTop);
+
+    if (plinkoBall.y + plinkoBall.radius >= slotTop + 12) {
+      plinkoBall.vx *= 0.86;
+      plinkoBall.vy *= 0.82;
+      plinkoBall.settledFrames += 1;
+
+      if (plinkoBall.settledFrames > 10 || plinkoBall.y > height * 0.925) {
+        const slot = getPlinkoSlotFromX(plinkoBall.x);
+        plinkoBall.payer = slot.player;
+        plinkoBall.x += (slot.centerX - plinkoBall.x) * 0.14;
+        plinkoBall.y = Math.min(plinkoBall.y, slot.y + slot.height * 0.45);
+        plinkoDropping = false;
+        return;
+      }
+    }
+  }
+}
+
+function keepPlinkoBallInsideWalls() {
+  const width = plinkoCanvas.clientWidth;
+  const left = width * 0.08 + plinkoBall.radius;
+  const right = width * 0.92 - plinkoBall.radius;
+
+  if (plinkoBall.x < left) {
+    plinkoBall.x = left;
+    plinkoBall.vx = Math.abs(plinkoBall.vx) * 0.72;
+  }
+
+  if (plinkoBall.x > right) {
+    plinkoBall.x = right;
+    plinkoBall.vx = -Math.abs(plinkoBall.vx) * 0.72;
+  }
+}
+
+function collidePlinkoBallWithPegs() {
+  plinkoPegs.forEach(peg => {
+    const dx = plinkoBall.x - peg.x;
+    const dy = plinkoBall.y - peg.y;
+    const distance = Math.hypot(dx, dy);
+    const minDistance = plinkoBall.radius + peg.radius + 1;
+
+    if (distance > 0 && distance < minDistance) {
+      const nx = dx / distance;
+      const ny = dy / distance;
+      const overlap = minDistance - distance;
+      const velocityAlongNormal = plinkoBall.vx * nx + plinkoBall.vy * ny;
+      const tangentKick = plinkoRandomBetween(-0.08, 0.08);
+
+      plinkoBall.x += nx * overlap;
+      plinkoBall.y += ny * overlap;
+
+      if (velocityAlongNormal < 0) {
+        plinkoBall.vx -= (1.72 * velocityAlongNormal) * nx;
+        plinkoBall.vy -= (1.72 * velocityAlongNormal) * ny;
+      }
+
+      plinkoBall.vx += -ny * tangentKick;
+      plinkoBall.vy += nx * tangentKick;
+      plinkoBall.vx *= 0.985;
+      plinkoBall.vy *= 0.992;
+    }
+  });
+}
+
+function slowPlinkoBallNearSlots(slotTop) {
+  if (plinkoBall.y > slotTop - 18) {
+    plinkoBall.vx *= 0.97;
+    plinkoBall.vy = Math.min(plinkoBall.vy, 4.2);
+  }
+}
+
+function preventStuckPlinkoBall() {
+  const movement = Math.hypot(plinkoBall.x - plinkoBall.lastX, plinkoBall.y - plinkoBall.lastY);
+  const speed = Math.hypot(plinkoBall.vx, plinkoBall.vy);
+
+  if (movement < 0.18 && speed < 0.55) {
+    plinkoBall.stuckFrames += 1;
+  } else {
+    plinkoBall.stuckFrames = 0;
+  }
+
+  if (plinkoBall.stuckFrames > 18) {
+    plinkoBall.vx += plinkoRandomBetween(-1.4, 1.4);
+    plinkoBall.vy += 1.8;
+    plinkoBall.y += plinkoBall.radius * 0.35;
+    plinkoBall.stuckFrames = 0;
+  }
+
+  plinkoBall.lastX = plinkoBall.x;
+  plinkoBall.lastY = plinkoBall.y;
+}
+
+function finishPlinkoDrop() {
+  const result = document.getElementById("plinkoResult");
+  const dropBtn = document.getElementById("plinkoDropBtn");
+
+  dropBtn.disabled = false;
+  result.textContent = `${plinkoBall.payer} pays Rs. ${billAmount}!`;
+
+  if (winSound) winSound.play().catch(() => {});
+
+  dropBtn.textContent = "Continue";
+  dropBtn.onclick = function () {
+    playTap();
+    showResult(plinkoBall.payer, "Plinko Board");
+  };
+}
+
+function stopPlinkoBoard() {
+  if (plinkoAnimationFrame) cancelAnimationFrame(plinkoAnimationFrame);
+  plinkoDropping = false;
+  plinkoBall = null;
+}
+
+function getPlinkoSlotFromX(x) {
+  return plinkoSlots.find(slot => x >= slot.x && x < slot.x + slot.width) || plinkoSlots[plinkoSlots.length - 1];
+}
+
+function shufflePlinkoArray(items) {
+  const shuffled = [...items];
+
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const randomIndex = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[i]];
+  }
+
+  return shuffled;
+}
+
+function plinkoRandomBetween(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function trimPlinkoName(name) {
+  return name.length > 7 ? `${name.slice(0, 6)}.` : name;
+}
+
+function drawRoundRect(ctx, x, y, width, height, radius) {
+  if (typeof ctx.roundRect === "function") {
+    ctx.roundRect(x, y, width, height, radius);
+    return;
+  }
+
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
 }
 
 
