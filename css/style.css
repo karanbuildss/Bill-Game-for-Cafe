@@ -137,6 +137,34 @@ button.secondary {
   border-radius: 99px;
 }
 
+.player-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.player-input-row input {
+  min-width: 0;
+}
+
+.remove-player-btn {
+  width: 46px;
+  min-height: 46px;
+  margin-top: 8px;
+  border-radius: 14px;
+  background: rgba(255, 61, 95, 0.14);
+  color: #ff6b8b;
+  border: 1px solid rgba(255, 107, 139, 0.38);
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.remove-player-btn:hover {
+  background: rgba(255, 61, 95, 0.22);
+}
+
 @media (max-height: 720px){
   .app{
     align-items: start;
@@ -368,6 +396,17 @@ button.secondary {
   place-items: center;
 }
 
+.round-label {
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  margin: 4px 0 8px;
+  color: #ffea00;
+  font-size: 15px;
+  font-weight: 900;
+  text-align: center;
+}
+
 .dice-scene {
   --dice-size: clamp(116px, 31vw, 140px);
   width: 230px;
@@ -550,12 +589,12 @@ button.secondary {
 }
 
 .plinko-panel {
-  width: min(430px, 100%);
+  width: min(410px, 100%);
 }
 
 .plinko-board-wrap {
   width: 100%;
-  aspect-ratio: 360 / 540;
+  aspect-ratio: 360 / 510;
   border-radius: 18px;
   overflow: hidden;
   background:
@@ -576,10 +615,10 @@ button.secondary {
 }
 
 .plinko-result {
-  min-height: 52px;
+  min-height: 50px;
   display: grid;
   place-items: center;
-  margin: 14px 0 4px;
+  margin: 10px 0 2px;
   padding: 12px;
   text-align: center;
   color: #00ffc8;

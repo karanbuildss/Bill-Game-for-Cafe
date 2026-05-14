@@ -5,6 +5,7 @@ const winSound = document.getElementById("winSound");
 let players = ["", ""];
 let billAmount = "";
 let lastPlayedGame = "";
+const maxPlayerNameLength = 12;
 
 function playTap() {
   if (!tapSound) return;
@@ -34,12 +35,25 @@ function showPlayerSetup(error = "") {
 
       <div id="playerInputs" class="player-input-list">
         ${players.map((name, index) => `
-          <input 
+          <div class="player-input-row">
+            <input 
             type="text" 
             placeholder="Player ${index + 1} name" 
             value="${name}"
+              maxlength="${maxPlayerNameLength}"
             oninput="players[${index}] = this.value"
-          />
+            />
+            ${index >= 2 ? `
+              <button 
+                class="remove-player-btn" 
+                type="button" 
+                aria-label="Remove player ${index + 1}"
+                onclick="removePlayerInput(${index})"
+              >
+                ×
+              </button>
+            ` : ""}
+          </div>
         `).join("")}
       </div>
 
@@ -64,13 +78,34 @@ function addPlayerInput() {
   showPlayerSetup();
 }
 
+function removePlayerInput(index) {
+  playTap();
+
+  if (players.length <= 2 || index < 2) return;
+
+  players.splice(index, 1);
+  showPlayerSetup();
+}
+
 function goToGameSelect() {
   playTap();
 
   const validPlayers = players.map(p => p.trim()).filter(Boolean);
+  const normalizedNames = validPlayers.map(name => name.toLowerCase());
+  const hasDuplicateNames = normalizedNames.some((name, index) => normalizedNames.indexOf(name) !== index);
 
   if (validPlayers.length < 2) {
     showPlayerSetup("Please enter at least two player names.");
+    return;
+  }
+
+  if (validPlayers.some(name => name.length > maxPlayerNameLength)) {
+    showPlayerSetup(`Player names must be ${maxPlayerNameLength} characters or less.`);
+    return;
+  }
+
+  if (hasDuplicateNames) {
+    showPlayerSetup("Player names must be unique.");
     return;
   }
 
@@ -182,10 +217,12 @@ function playAgain() {
 let wheelAngle = 0;
 let isWheelSpinning = false;
 let selectedWheelPayer = null;
+let wheelPlayers = [];
 
 function showSpinWheel() {
   selectedWheelPayer = null;
   isWheelSpinning = false;
+  wheelPlayers = shuffleItems(players);
 
   setScreen(`
     <div class="panel">
@@ -220,7 +257,7 @@ function drawWheel() {
   const size = canvas.width;
   const center = size / 2;
   const radius = center - 10;
-  const slice = Math.PI * 2 / players.length;
+  const slice = Math.PI * 2 / wheelPlayers.length;
 
 const colors = [
   "#ff1744", // neon red
@@ -237,7 +274,7 @@ const colors = [
 
   ctx.clearRect(0, 0, size, size);
 
-  players.forEach((player, index) => {
+  wheelPlayers.forEach((player, index) => {
     const start = wheelAngle + index * slice;
     const end = start + slice;
 
@@ -305,10 +342,10 @@ if (wheelHint) wheelHint.classList.add("hidden");
   spinBtn.disabled = true;
   resultBox.innerHTML = "";
 
-  const selectedIndex = Math.floor(Math.random() * players.length);
-  selectedWheelPayer = players[selectedIndex];
+  const selectedIndex = Math.floor(Math.random() * wheelPlayers.length);
+  selectedWheelPayer = wheelPlayers[selectedIndex];
 
-  const slice = Math.PI * 2 / players.length;
+  const slice = Math.PI * 2 / wheelPlayers.length;
   const pointerAngle = -Math.PI / 2;
   const targetAngle = pointerAngle - selectedIndex * slice - slice / 2;
 
@@ -373,6 +410,10 @@ let dicePlayers = [];
 let diceScores = [];
 let diceCurrentIndex = 0;
 let diceIsRolling = false;
+let diceRoundNumber = 1;
+let diceRoundWins = {};
+let diceIsTieBreaker = false;
+const diceBestOfRounds = 3;
 
 const diceFaceRotations = {
   1: "rotateX(0deg) rotateY(0deg)",
@@ -383,17 +424,23 @@ const diceFaceRotations = {
   6: "rotateX(0deg) rotateY(180deg)"
 };
 
-function showDiceRoll(roundPlayers = players, message = "Highest roll pays the bill.") {
+function showDiceRoll(roundPlayers = players, message = "Best of 3 rounds. Highest roll wins each round.", roundNumber = 1, roundWins = null, isTieBreaker = false) {
   dicePlayers = [...roundPlayers];
   diceScores = [];
   diceCurrentIndex = 0;
   diceIsRolling = false;
+  diceRoundNumber = roundNumber;
+  diceRoundWins = roundWins || createScoreMap(players);
+  diceIsTieBreaker = isTieBreaker;
+
+  const roundLabel = diceIsTieBreaker ? "Tie Breaker" : `Round ${diceRoundNumber} of ${diceBestOfRounds}`;
 
   setScreen(`
     <div class="panel dice-panel">
       <h2>Dice Roll</h2>
       <p id="diceMessage">${message}</p>
 
+      <div class="round-label">${roundLabel}</div>
       <div id="diceTurn" class="dice-turn">${dicePlayers[0]}'s turn</div>
 
       <div class="dice-scene" onclick="rollDiceForPlayer()">
@@ -504,7 +551,7 @@ function renderDiceScoreboard() {
     return `
       <div class="dice-score-row">
         <span>${player}</span>
-        <strong>${score ? score.value : "-"}</strong>
+        <strong>${score ? score.value : "-"} | ${diceRoundWins[player] || 0}W</strong>
       </div>
     `;
   }).join("");
@@ -522,18 +569,47 @@ function finishDiceRound() {
   if (winners.length > 1) {
     const tiedPlayers = winners.map(score => score.name);
     diceTurn.textContent = "Tie!";
-    diceMessage.textContent = `${tiedPlayers.join(", ")} tied with ${highest}. Roll again.`;
-    rollBtn.textContent = "Roll Tie Breaker";
+    diceMessage.textContent = `${tiedPlayers.join(", ")} tied with ${highest}. Replay this round.`;
+    rollBtn.textContent = "Replay Tied Round";
     rollBtn.onclick = function () {
       playTap();
-      showDiceRoll(tiedPlayers, "Tie breaker round. Highest roll pays.");
+      showDiceRoll(tiedPlayers, `Tie in round ${diceRoundNumber}. Highest roll wins this round.`, diceRoundNumber, diceRoundWins, diceIsTieBreaker);
     };
     return;
   }
 
-  const payer = winners[0].name;
+  const roundWinner = winners[0].name;
+  diceRoundWins[roundWinner] = (diceRoundWins[roundWinner] || 0) + 1;
+  renderDiceScoreboard();
+
+  if (!diceIsTieBreaker && diceRoundNumber < diceBestOfRounds) {
+    diceTurn.textContent = `${roundWinner} wins round ${diceRoundNumber}`;
+    diceMessage.textContent = `${roundWinner} scored a round win.`;
+    rollBtn.textContent = `Start Round ${diceRoundNumber + 1}`;
+    rollBtn.onclick = function () {
+      playTap();
+      showDiceRoll(players, "Best of 3 rounds. Highest roll wins each round.", diceRoundNumber + 1, diceRoundWins);
+    };
+    return;
+  }
+
+  const highestWins = Math.max(...Object.values(diceRoundWins));
+  const finalWinners = Object.keys(diceRoundWins).filter(player => diceRoundWins[player] === highestWins);
+
+  if (finalWinners.length > 1) {
+    diceTurn.textContent = "Final Tie!";
+    diceMessage.textContent = `${finalWinners.join(", ")} tied with ${highestWins} round wins.`;
+    rollBtn.textContent = "Start Final Tie Breaker";
+    rollBtn.onclick = function () {
+      playTap();
+      showDiceRoll(finalWinners, "Final tie breaker. Highest roll pays.", diceRoundNumber, diceRoundWins, true);
+    };
+    return;
+  }
+
+  const payer = finalWinners[0];
   diceTurn.textContent = `${payer} pays!`;
-  diceMessage.textContent = `${payer} rolled the highest number.`;
+  diceMessage.textContent = `${payer} won the best of 3.`;
   rollBtn.textContent = "Continue";
   rollBtn.onclick = function () {
     playTap();
@@ -552,21 +628,31 @@ let plinkoBall = null;
 let plinkoDropping = false;
 let plinkoLastTime = 0;
 let plinkoAnimationFrame = null;
+let plinkoRoundNumber = 1;
+let plinkoRoundWins = {};
+let plinkoActivePlayers = [];
+let plinkoIsTieBreaker = false;
 const plinkoRows = 9;
+const plinkoBestOfRounds = 3;
 
 function showPlinkoBoard() {
   stopPlinkoBoard();
-  plinkoSlotPlayers = [...players];
+  plinkoRoundNumber = 1;
+  plinkoRoundWins = createScoreMap(players);
+  plinkoActivePlayers = [...players];
+  plinkoSlotPlayers = [...plinkoActivePlayers];
+  plinkoIsTieBreaker = false;
 
   setScreen(`
     <div class="panel plinko-panel">
       <h2>Plinko Board</h2>
-      <p>Drop the ball and let the slot decide who pays.</p>
+      <p>Best of 3 drops. Most slot wins pays the bill.</p>
 
       <div class="plinko-board-wrap">
         <canvas id="plinkoCanvas"></canvas>
       </div>
 
+      <div id="plinkoRoundLabel" class="round-label">Drop 1 of 3</div>
       <div id="plinkoResult" class="plinko-result">Ready to drop</div>
 
       <button id="plinkoDropBtn" onclick="dropPlinkoBall()">Drop Ball</button>
@@ -627,7 +713,7 @@ function createPlinkoSlots() {
   const height = plinkoCanvas.clientHeight;
   const slotWidth = width / plinkoSlotPlayers.length;
   const slotY = height * 0.86;
-  const slotHeight = height * 0.105;
+  const slotHeight = Math.min(height * 0.105, 58);
 
   plinkoSlots = plinkoSlotPlayers.map((player, index) => ({
     player,
@@ -680,6 +766,7 @@ function drawPlinkoPegs() {
 
 function drawPlinkoSlots() {
   const colors = ["#ff1744", "#ff9100", "#ffea00", "#00e676", "#00b0ff", "#651fff", "#f50057"];
+  const slotFontSize = Math.max(10, Math.min(12, plinkoCanvas.clientWidth / (plinkoSlotPlayers.length * 7)));
 
   plinkoSlots.forEach((slot, index) => {
     plinkoCtx.save();
@@ -693,7 +780,7 @@ function drawPlinkoSlots() {
 
     plinkoCtx.save();
     plinkoCtx.fillStyle = index === 2 ? "#05060c" : "#ffffff";
-    plinkoCtx.font = "700 12px Arial";
+    plinkoCtx.font = `700 ${slotFontSize}px Arial`;
     plinkoCtx.textAlign = "center";
     plinkoCtx.textBaseline = "middle";
     plinkoCtx.fillText(trimPlinkoName(slot.player), slot.centerX, slot.y + slot.height / 2);
@@ -731,8 +818,9 @@ function dropPlinkoBall() {
   result.textContent = "Dropping...";
   dropBtn.disabled = true;
 
-  plinkoSlotPlayers = shufflePlinkoArray(players);
+  plinkoSlotPlayers = shuffleItems(plinkoActivePlayers);
   createPlinkoSlots();
+  drawPlinkoBoard();
 
   plinkoBall = {
     x: width / 2 + plinkoRandomBetween(-14, 14),
@@ -875,16 +963,60 @@ function preventStuckPlinkoBall() {
 function finishPlinkoDrop() {
   const result = document.getElementById("plinkoResult");
   const dropBtn = document.getElementById("plinkoDropBtn");
+  const roundLabel = document.getElementById("plinkoRoundLabel");
 
   dropBtn.disabled = false;
-  result.textContent = `${plinkoBall.payer} pays Rs. ${billAmount}!`;
+  plinkoRoundWins[plinkoBall.payer] = (plinkoRoundWins[plinkoBall.payer] || 0) + 1;
 
+  if (plinkoIsTieBreaker) {
+    result.textContent = `${plinkoBall.payer} wins the tie breaker and pays Rs. ${billAmount}!`;
+    roundLabel.textContent = "Final Result";
+    if (winSound) winSound.play().catch(() => {});
+
+    dropBtn.textContent = "Continue";
+    dropBtn.onclick = function () {
+      playTap();
+      showResult(plinkoBall.payer, "Plinko Board");
+    };
+    return;
+  }
+
+  if (plinkoRoundNumber < plinkoBestOfRounds) {
+    result.textContent = `${plinkoBall.payer} wins drop ${plinkoRoundNumber}.`;
+    plinkoRoundNumber += 1;
+    roundLabel.textContent = `Drop ${plinkoRoundNumber} of ${plinkoBestOfRounds}`;
+    dropBtn.textContent = `Drop ${plinkoRoundNumber}`;
+    dropBtn.onclick = dropPlinkoBall;
+    return;
+  }
+
+  const highestWins = Math.max(...Object.values(plinkoRoundWins));
+  const winners = Object.keys(plinkoRoundWins).filter(player => plinkoRoundWins[player] === highestWins);
+
+  if (winners.length > 1) {
+    plinkoActivePlayers = winners;
+    plinkoSlotPlayers = shuffleItems(winners);
+    plinkoIsTieBreaker = true;
+    createPlinkoSlots();
+    plinkoBall = null;
+    drawPlinkoBoard();
+
+    result.textContent = `${winners.join(", ")} tied. One final drop decides.`;
+    roundLabel.textContent = "Tie Breaker";
+    dropBtn.textContent = "Drop Tie Breaker";
+    dropBtn.onclick = dropPlinkoBall;
+    return;
+  }
+
+  const payer = winners[0];
+  result.textContent = `${payer} won best of 3 and pays Rs. ${billAmount}!`;
+  roundLabel.textContent = "Final Result";
   if (winSound) winSound.play().catch(() => {});
 
   dropBtn.textContent = "Continue";
   dropBtn.onclick = function () {
     playTap();
-    showResult(plinkoBall.payer, "Plinko Board");
+    showResult(payer, "Plinko Board");
   };
 }
 
@@ -898,7 +1030,14 @@ function getPlinkoSlotFromX(x) {
   return plinkoSlots.find(slot => x >= slot.x && x < slot.x + slot.width) || plinkoSlots[plinkoSlots.length - 1];
 }
 
-function shufflePlinkoArray(items) {
+function createScoreMap(items) {
+  return items.reduce((scores, item) => {
+    scores[item] = 0;
+    return scores;
+  }, {});
+}
+
+function shuffleItems(items) {
   const shuffled = [...items];
 
   for (let i = shuffled.length - 1; i > 0; i -= 1) {
