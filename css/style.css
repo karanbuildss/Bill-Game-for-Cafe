@@ -594,7 +594,7 @@ button.secondary {
 
 .plinko-board-wrap {
   width: 100%;
-  aspect-ratio: 360 / 510;
+  aspect-ratio: 360 / 470;
   border-radius: 18px;
   overflow: hidden;
   background:

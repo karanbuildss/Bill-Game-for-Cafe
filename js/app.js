@@ -681,8 +681,8 @@ function setupPlinkoCanvas() {
 function createPlinkoBoard() {
   const width = plinkoCanvas.clientWidth;
   const height = plinkoCanvas.clientHeight;
-  const top = height * 0.11;
-  const rowGap = height * 0.07;
+  const top = height * 0.1;
+  const rowGap = height * 0.062;
   const boardLeft = width * 0.09;
   const boardRight = width * 0.91;
   const maxPegCount = plinkoRows + 1;
@@ -712,8 +712,8 @@ function createPlinkoSlots() {
   const width = plinkoCanvas.clientWidth;
   const height = plinkoCanvas.clientHeight;
   const slotWidth = width / plinkoSlotPlayers.length;
-  const slotY = height * 0.86;
-  const slotHeight = Math.min(height * 0.105, 58);
+  const slotY = height * 0.78;
+  const slotHeight = Math.min(height * 0.115, 58);
 
   plinkoSlots = plinkoSlotPlayers.map((player, index) => ({
     player,
@@ -743,7 +743,7 @@ function drawPlinkoBackground(width, height) {
   plinkoCtx.save();
   plinkoCtx.fillStyle = "rgba(255, 61, 242, 0.08)";
   plinkoCtx.beginPath();
-  drawRoundRect(plinkoCtx, width * 0.07, height * 0.08, width * 0.86, height * 0.78, 22);
+  drawRoundRect(plinkoCtx, width * 0.07, height * 0.08, width * 0.86, height * 0.72, 22);
   plinkoCtx.fill();
   plinkoCtx.strokeStyle = "rgba(0, 255, 200, 0.22)";
   plinkoCtx.lineWidth = 2;
@@ -766,7 +766,7 @@ function drawPlinkoPegs() {
 
 function drawPlinkoSlots() {
   const colors = ["#ff1744", "#ff9100", "#ffea00", "#00e676", "#00b0ff", "#651fff", "#f50057"];
-  const slotFontSize = Math.max(10, Math.min(12, plinkoCanvas.clientWidth / (plinkoSlotPlayers.length * 7)));
+  const slotFontSize = Math.max(12, Math.min(15, plinkoCanvas.clientWidth / (plinkoSlotPlayers.length * 5.8)));
 
   plinkoSlots.forEach((slot, index) => {
     plinkoCtx.save();
@@ -855,7 +855,7 @@ function animatePlinkoDrop(now) {
 
 function updatePlinkoPhysics(delta) {
   const height = plinkoCanvas.clientHeight;
-  const slotTop = height * 0.86;
+  const slotTop = height * 0.78;
   const subSteps = 5;
   const step = delta / subSteps;
 
