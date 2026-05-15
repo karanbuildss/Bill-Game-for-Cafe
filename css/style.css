@@ -83,6 +83,24 @@ button.secondary {
   border: 1px solid rgba(255,255,255,0.14);
 }
 
+.sound-toggle {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 30;
+  width: auto;
+  min-height: 38px;
+  margin: 0;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(17, 20, 38, 0.88);
+  border: 1px solid rgba(0, 255, 200, 0.28);
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 0 18px rgba(0, 255, 200, 0.12);
+}
+
 .game-card {
   padding: 16px;
   margin-top: 12px;
@@ -300,6 +318,20 @@ button.secondary {
   pointer-events: none;
 }
 
+.finger-notice {
+  display: inline-grid;
+  place-items: center;
+  min-height: 34px;
+  margin-bottom: 16px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #ffea00;
+  background: rgba(255, 234, 0, 0.1);
+  border: 1px solid rgba(255, 234, 0, 0.32);
+  font-size: clamp(13px, 3vw, 16px);
+  font-weight: 900;
+}
+
 .finger-countdown {
   display: block;
   margin-top: 18px;
@@ -429,7 +461,7 @@ button.secondary {
 }
 
 .game-dice.rolling {
-  animation: diceTumble 480ms linear infinite;
+  animation: diceTumble 1000ms linear infinite;
 }
 
 .dice-face {
@@ -483,6 +515,15 @@ button.secondary {
   box-shadow:
     inset 2px 2px 4px rgba(255, 255, 255, 0.2),
     inset -2px -2px 4px rgba(0, 0, 0, 0.45);
+}
+
+.game-dice.landed .dice-dot {
+  background: #07111f;
+  box-shadow:
+    0 0 8px rgba(0, 255, 200, 0.85),
+    0 0 18px rgba(0, 255, 200, 0.65),
+    inset 2px 2px 4px rgba(255, 255, 255, 0.24),
+    inset -2px -2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .dice-center {
@@ -560,6 +601,8 @@ button.secondary {
     transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
   }
 
+  
+
   to {
     transform: rotateX(360deg) rotateY(540deg) rotateZ(270deg);
   }
@@ -590,11 +633,26 @@ button.secondary {
 
 .plinko-panel {
   width: min(410px, 100%);
+  max-height: calc(100dvh - 28px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.plinko-panel h2 {
+  margin-bottom: 8px;
+}
+
+.plinko-panel p {
+  margin-bottom: 10px;
+  font-size: clamp(13px, 2.8vw, 15px);
 }
 
 .plinko-board-wrap {
   width: 100%;
-  aspect-ratio: 360 / 470;
+  height: clamp(220px, 48dvh, 430px);
+  flex: 1 1 auto;
+  min-height: 0;
   border-radius: 18px;
   overflow: hidden;
   background:
@@ -615,10 +673,11 @@ button.secondary {
 }
 
 .plinko-result {
-  min-height: 50px;
+  min-height: 48px;
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
-  margin: 10px 0 2px;
+  margin: 8px 0 2px;
   padding: 12px;
   text-align: center;
   color: #00ffc8;
@@ -627,4 +686,34 @@ button.secondary {
   border-radius: 14px;
   background: rgba(0, 255, 200, 0.08);
   text-shadow: 0 0 16px rgba(0, 255, 200, 0.45);
+}
+
+.plinko-panel .round-label {
+  flex: 0 0 auto;
+  margin: 6px 0 6px;
+}
+
+.plinko-panel button {
+  flex: 0 0 auto;
+}
+
+@media (max-height: 720px) {
+  .plinko-panel {
+    padding: 18px;
+  }
+
+  .plinko-board-wrap {
+    height: clamp(190px, 42dvh, 360px);
+  }
+
+  .plinko-result {
+    min-height: 42px;
+    font-size: 17px;
+    margin-top: 6px;
+  }
+
+  .plinko-panel button {
+    min-height: 46px;
+    margin-top: 8px;
+  }
 }

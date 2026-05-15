@@ -1,20 +1,182 @@
 const screen = document.getElementById("screen");
 const tapSound = document.getElementById("tapSound");
 const winSound = document.getElementById("winSound");
-
+const spinWheelSound = document.getElementById("spinWheelSound");
 let players = ["", ""];
-let billAmount = "";
 let lastPlayedGame = "";
 const maxPlayerNameLength = 12;
+const storageKey = "billRoulettePlayers";
+const soundStorageKey = "billRouletteSoundEnabled";
+let appAudioContext = null;
+let diceRollSoundTimer = null;
+let soundEnabled = true;
 
 function playTap() {
-  if (!tapSound) return;
-  tapSound.currentTime = 0;
-  tapSound.play().catch(() => {});
+  if (!soundEnabled) return;
+  playTone(260, 0.045, 0.045, "sine");
+}
+
+function restartSound(sound) {
+  if (!sound || !soundEnabled) return;
+
+  sound.pause();
+  sound.currentTime = 0;
+  sound.play().catch(() => {});
+}
+
+function getAudioContext() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return null;
+
+  if (!appAudioContext) {
+    appAudioContext = new AudioContext();
+  }
+
+  if (appAudioContext.state === "suspended") {
+    appAudioContext.resume().catch(() => {});
+  }
+
+  return appAudioContext;
+}
+
+function playTone(frequency, duration = 0.08, volume = 0.08, type = "sine") {
+  if (!soundEnabled) return;
+
+  const audioContext = getAudioContext();
+  if (!audioContext) return;
+
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const now = audioContext.currentTime;
+
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, now);
+
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+
+  oscillator.start(now);
+  oscillator.stop(now + duration + 0.01);
+}
+
+function playAddPlayerSound() {
+  if (!soundEnabled) return;
+  playTone(420, 0.055, 0.055, "triangle");
+  setTimeout(() => playTone(620, 0.06, 0.05, "triangle"), 45);
+}
+
+function playRemovePlayerSound() {
+  if (!soundEnabled) return;
+  playTone(360, 0.055, 0.05, "triangle");
+  setTimeout(() => playTone(220, 0.07, 0.045, "triangle"), 45);
+}
+
+function playErrorSound() {
+  if (!soundEnabled) return;
+  playTone(130, 0.12, 0.06, "sawtooth");
+  setTimeout(() => playTone(105, 0.1, 0.05, "sawtooth"), 80);
+
+  if (navigator.vibrate) {
+    navigator.vibrate(120);
+  }
+}
+
+
+function playDiceRollSound() {
+  if (!soundEnabled) return;
+  stopDiceRollSound();
+
+  diceRollSoundTimer = setInterval(() => {
+    const tones = [180, 220, 260, 300, 340];
+    const tone = tones[Math.floor(Math.random() * tones.length)];
+    playTone(tone, 0.035, 0.035, "square");
+  }, 75);
+}
+
+function stopDiceRollSound() {
+  if (!diceRollSoundTimer) return;
+
+  clearInterval(diceRollSoundTimer);
+  diceRollSoundTimer = null;
+}
+
+function playDiceLandSound() {
+  if (!soundEnabled) return;
+  playTone(95, 0.12, 0.07, "triangle");
+}
+
+function loadSoundPreference() {
+  soundEnabled = localStorage.getItem(soundStorageKey) !== "false";
+}
+
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  localStorage.setItem(soundStorageKey, String(soundEnabled));
+  stopDiceRollSound();
+
+  if (!soundEnabled) {
+    [tapSound, winSound, spinWheelSound].forEach(sound => {
+      if (sound) sound.pause();
+    });
+  } else {
+    playTone(520, 0.06, 0.05, "triangle");
+  }
+
+  updateSoundToggle();
+}
+
+function updateSoundToggle() {
+  const soundToggle = document.getElementById("soundToggle");
+  if (!soundToggle) return;
+
+  soundToggle.textContent = soundEnabled ? "Sound On" : "Sound Off";
+  soundToggle.setAttribute("aria-pressed", String(soundEnabled));
 }
 
 function setScreen(html) {
-  screen.innerHTML = html;
+  screen.innerHTML = `
+    <button 
+      id="soundToggle" 
+      class="sound-toggle" 
+      type="button" 
+      aria-pressed="${soundEnabled}" 
+      onclick="toggleSound()"
+    >
+      ${soundEnabled ? "Sound On" : "Sound Off"}
+    </button>
+    ${html}
+  `;
+
+  updateSoundToggle();
+}
+
+function savePlayers() {
+  const savedPlayers = players.map(player => player.trim()).filter(Boolean);
+  localStorage.setItem(storageKey, JSON.stringify(savedPlayers));
+}
+
+function loadPlayers() {
+  try {
+    const savedPlayers = JSON.parse(localStorage.getItem(storageKey));
+
+    if (Array.isArray(savedPlayers) && savedPlayers.length >= 2) {
+      players = savedPlayers.slice(0, 12);
+      return;
+    }
+  } catch (error) {
+    localStorage.removeItem(storageKey);
+  }
+
+  players = ["", ""];
+}
+
+function clearSavedPlayers() {
+  localStorage.removeItem(storageKey);
+  players = ["", ""];
 }
 
 function showWelcome() {
@@ -31,7 +193,7 @@ function showPlayerSetup(error = "") {
   setScreen(`
     <div class="panel setup-panel">
       <h2>Player Setup</h2>
-      <p>Add at least two players and enter the bill amount.</p>
+      <p>Add at least two players to start the game.</p>
 
       <div id="playerInputs" class="player-input-list">
         ${players.map((name, index) => `
@@ -57,13 +219,6 @@ function showPlayerSetup(error = "") {
         `).join("")}
       </div>
 
-      <input 
-        type="number" 
-        placeholder="Bill amount" 
-        value="${billAmount}"
-        oninput="billAmount = this.value"
-      />
-
       <button class="secondary" onclick="addPlayerInput()">Add Another Player</button>
       <button onclick="goToGameSelect()">Continue</button>
 
@@ -73,17 +228,18 @@ function showPlayerSetup(error = "") {
 }
 
 function addPlayerInput() {
-  playTap();
+  playAddPlayerSound();
   players.push("");
+  savePlayers();
   showPlayerSetup();
 }
 
 function removePlayerInput(index) {
-  playTap();
-
   if (players.length <= 2 || index < 2) return;
 
+  playRemovePlayerSound();
   players.splice(index, 1);
+  savePlayers();
   showPlayerSetup();
 }
 
@@ -95,26 +251,25 @@ function goToGameSelect() {
   const hasDuplicateNames = normalizedNames.some((name, index) => normalizedNames.indexOf(name) !== index);
 
   if (validPlayers.length < 2) {
+    playErrorSound();
     showPlayerSetup("Please enter at least two player names.");
     return;
   }
 
   if (validPlayers.some(name => name.length > maxPlayerNameLength)) {
+    playErrorSound();
     showPlayerSetup(`Player names must be ${maxPlayerNameLength} characters or less.`);
     return;
   }
 
   if (hasDuplicateNames) {
+    playErrorSound();
     showPlayerSetup("Player names must be unique.");
     return;
   }
 
-  if (!billAmount || Number(billAmount) <= 0) {
-    showPlayerSetup("Please enter a valid bill amount.");
-    return;
-  }
-
   players = validPlayers;
+  savePlayers();
   showGameSelect();
 }
 
@@ -122,7 +277,7 @@ function showGameSelect() {
   setScreen(`
     <div class="panel">
       <h2>Pick a Game</h2>
-      <p>${players.length} players | Bill Rs. ${billAmount}</p>
+      <p>${players.length} players ready</p>
 
       ${gameButton("Spin Wheel", "Color wheel decides who pays.", "showSpinWheel")}
       ${gameButton("Finger Chooser", "Place fingers on screen and randomly choose payer.", "showFingerChooser")}
@@ -181,11 +336,10 @@ function showResult(payer, gameName) {
     <div class="panel">
       <h2>${payer} Pays!</h2>
       <p>${gameName} selected the payer.</p>
-      <p>Bill Amount: Rs. ${billAmount}</p>
 
       <button onclick="playTap(); playAgain()">Play Again</button>
       <button onclick="playTap(); showGameSelect()">Change Game</button>
-      <button class="secondary" onclick="playTap(); showPlayerSetup()">Reset Players</button>
+      <button class="secondary" onclick="playTap(); clearSavedPlayers(); showPlayerSetup()">Reset Players</button>
     </div>
   `);
 }
@@ -218,6 +372,34 @@ let wheelAngle = 0;
 let isWheelSpinning = false;
 let selectedWheelPayer = null;
 let wheelPlayers = [];
+let lastTickSliceIndex = -1;
+
+function playWheelTick(sliceIndex) {
+  if (!soundEnabled) return;
+
+  const audioContext = getAudioContext();
+  if (!audioContext) return;
+
+  const tones = [520, 620, 740, 860, 980];
+  const frequency = tones[sliceIndex % tones.length];
+
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const now = audioContext.currentTime;
+
+  oscillator.type = "triangle";
+  oscillator.frequency.value = frequency;
+
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+
+  oscillator.start(now);
+  oscillator.stop(now + 0.09);
+}
 
 function showSpinWheel() {
   selectedWheelPayer = null;
@@ -323,13 +505,14 @@ const colors = [
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 16px Arial";
   ctx.textAlign = "center";
-  ctx.fillText("BILL", center, center + 5);
+  ctx.fillText("PAY", center, center + 5);
 }
 
 function spinWheel() {
   if (isWheelSpinning) return;
 
   playTap();
+  lastTickSliceIndex = -1;
   isWheelSpinning = true;
 
   const spinBtn = document.getElementById("spinBtn");
@@ -365,6 +548,13 @@ if (wheelHint) wheelHint.classList.add("hidden");
     wheelAngle = startAngle + (finalAngle - startAngle) * eased;
     drawWheel();
 
+    const currentTickSlice = getSliceUnderPointer();
+
+    if (currentTickSlice !== lastTickSliceIndex) {
+      playWheelTick(currentTickSlice);
+      lastTickSliceIndex = currentTickSlice;
+    }
+
     if (progress < 1) {
       requestAnimationFrame(animate);
     } else {
@@ -375,17 +565,24 @@ if (wheelHint) wheelHint.classList.add("hidden");
   requestAnimationFrame(animate);
 }
 
+function getSliceUnderPointer() {
+  const slice = Math.PI * 2 / wheelPlayers.length;
+  const pointerAngle = -Math.PI / 2;
+  const normalizedPointer = normalizeAngle(pointerAngle - wheelAngle);
+  return Math.floor(normalizedPointer / slice) % wheelPlayers.length;
+}
+
 function finishSpin() {
   isWheelSpinning = false;
 
   const spinBtn = document.getElementById("spinBtn");
   const resultBox = document.getElementById("spinResult");
 
-  if (winSound) winSound.play().catch(() => {});
+  restartSound(winSound);
 
   resultBox.innerHTML = `
     <div class="result-pop">
-      ${selectedWheelPayer} pays the full bill of Rs. ${billAmount}!
+      ${selectedWheelPayer} pays the full bill!
     </div>
   `;
 
@@ -416,12 +613,12 @@ let diceIsTieBreaker = false;
 const diceBestOfRounds = 3;
 
 const diceFaceRotations = {
-  1: "rotateX(0deg) rotateY(0deg)",
-  2: "rotateX(0deg) rotateY(-90deg)",
-  3: "rotateX(-90deg) rotateY(0deg)",
-  4: "rotateX(90deg) rotateY(0deg)",
-  5: "rotateX(0deg) rotateY(90deg)",
-  6: "rotateX(0deg) rotateY(180deg)"
+  1: "rotateX(-10deg) rotateY(14deg)",
+  2: "rotateX(-10deg) rotateY(-76deg)",
+  3: "rotateX(-100deg) rotateY(14deg)",
+  4: "rotateX(80deg) rotateY(14deg)",
+  5: "rotateX(-10deg) rotateY(104deg)",
+  6: "rotateX(-10deg) rotateY(194deg)"
 };
 
 function showDiceRoll(roundPlayers = players, message = "Best of 3 rounds. Highest roll wins each round.", roundNumber = 1, roundWins = null, isTieBreaker = false) {
@@ -502,6 +699,7 @@ function rollDiceForPlayer() {
   if (diceIsRolling || diceCurrentIndex >= dicePlayers.length) return;
 
   playTap();
+  playDiceRollSound();
   diceIsRolling = true;
 
   const dice = document.getElementById("gameDice");
@@ -511,20 +709,25 @@ function rollDiceForPlayer() {
   const value = Math.floor(Math.random() * 6) + 1;
   const tumbleTime = 850 + Math.floor(Math.random() * 550);
   const settleTime = 800 + Math.floor(Math.random() * 280);
-  const extraX = 360 * (2 + Math.floor(Math.random() * 4));
-  const extraY = 360 * (2 + Math.floor(Math.random() * 4));
+  const extraX = 360 * (5 + Math.floor(Math.random() * 4));
+  const extraY = 360 * (6 + Math.floor(Math.random() * 4));
+  const extraZ = 360 * (4 + Math.floor(Math.random() * 4));
 
   rollBtn.disabled = true;
   diceValue.textContent = `${currentPlayer} is rolling...`;
+  dice.classList.remove("landed");
   dice.classList.add("rolling");
-  dice.style.animationDuration = `${360 + Math.floor(Math.random() * 260)}ms`;
+  dice.style.animationDuration = `${250 + Math.floor(Math.random() * 170)}ms`;
 
   setTimeout(() => {
     dice.classList.remove("rolling");
+    stopDiceRollSound();
+    playDiceLandSound();
     dice.style.transitionDuration = `${settleTime}ms`;
-    dice.style.transform = `${diceFaceRotations[value]} rotateX(${extraX}deg) rotateY(${extraY}deg) scale(1.08)`;
+    dice.style.transform = `${diceFaceRotations[value]} rotateX(${extraX}deg) rotateY(${extraY}deg) rotateZ(${extraZ}deg) scale(1.08)`;
 
     setTimeout(() => {
+      dice.classList.add("landed");
       diceScores.push({ name: currentPlayer, value });
       diceValue.textContent = `${currentPlayer} rolled ${value}`;
       diceCurrentIndex += 1;
@@ -632,7 +835,7 @@ let plinkoRoundNumber = 1;
 let plinkoRoundWins = {};
 let plinkoActivePlayers = [];
 let plinkoIsTieBreaker = false;
-const plinkoRows = 9;
+let plinkoGeometry = null;
 const plinkoBestOfRounds = 3;
 
 function showPlinkoBoard() {
@@ -679,18 +882,19 @@ function setupPlinkoCanvas() {
 }
 
 function createPlinkoBoard() {
+  plinkoGeometry = getPlinkoGeometry();
+  const {
+    rows,
+    top,
+    rowGap,
+    pegGap,
+    pegRadius
+  } = plinkoGeometry;
   const width = plinkoCanvas.clientWidth;
-  const height = plinkoCanvas.clientHeight;
-  const top = height * 0.1;
-  const rowGap = height * 0.062;
-  const boardLeft = width * 0.09;
-  const boardRight = width * 0.91;
-  const maxPegCount = plinkoRows + 1;
-  const pegGap = (boardRight - boardLeft) / (maxPegCount - 1);
 
   plinkoPegs = [];
 
-  for (let row = 0; row < plinkoRows; row += 1) {
+  for (let row = 0; row < rows; row += 1) {
     const count = row + 2;
     const rowWidth = (count - 1) * pegGap;
     const startX = width / 2 - rowWidth / 2;
@@ -700,7 +904,7 @@ function createPlinkoBoard() {
       plinkoPegs.push({
         x: startX + col * pegGap,
         y,
-        radius: Math.max(3.6, width * 0.01)
+        radius: pegRadius
       });
     }
   }
@@ -709,11 +913,14 @@ function createPlinkoBoard() {
 }
 
 function createPlinkoSlots() {
+  if (!plinkoGeometry) {
+    plinkoGeometry = getPlinkoGeometry();
+  }
+
   const width = plinkoCanvas.clientWidth;
-  const height = plinkoCanvas.clientHeight;
   const slotWidth = width / plinkoSlotPlayers.length;
-  const slotY = height * 0.78;
-  const slotHeight = Math.min(height * 0.115, 58);
+  const slotY = plinkoGeometry.slotY;
+  const slotHeight = plinkoGeometry.slotHeight;
 
   plinkoSlots = plinkoSlotPlayers.map((player, index) => ({
     player,
@@ -813,25 +1020,25 @@ function dropPlinkoBall() {
   const result = document.getElementById("plinkoResult");
   const dropBtn = document.getElementById("plinkoDropBtn");
   const width = plinkoCanvas.clientWidth;
-  const height = plinkoCanvas.clientHeight;
 
   result.textContent = "Dropping...";
   dropBtn.disabled = true;
 
+  createPlinkoBoard();
   plinkoSlotPlayers = shuffleItems(plinkoActivePlayers);
   createPlinkoSlots();
   drawPlinkoBoard();
 
   plinkoBall = {
-    x: width / 2 + plinkoRandomBetween(-14, 14),
-    y: height * 0.045,
-    radius: Math.max(9, width * 0.028),
-    vx: plinkoRandomBetween(-1.6, 1.6),
+    x: width / 2 + plinkoRandomBetween(-plinkoGeometry.pegGap * 0.18, plinkoGeometry.pegGap * 0.18),
+    y: plinkoGeometry.spawnY,
+    radius: plinkoGeometry.ballRadius,
+    vx: plinkoRandomBetween(-plinkoGeometry.pegGap * 0.035, plinkoGeometry.pegGap * 0.035),
     vy: 0,
     settledFrames: 0,
     stuckFrames: 0,
     lastX: width / 2,
-    lastY: height * 0.045,
+    lastY: plinkoGeometry.spawnY,
     payer: ""
   };
 
@@ -855,12 +1062,12 @@ function animatePlinkoDrop(now) {
 
 function updatePlinkoPhysics(delta) {
   const height = plinkoCanvas.clientHeight;
-  const slotTop = height * 0.78;
+  const slotTop = plinkoGeometry.slotY;
   const subSteps = 5;
   const step = delta / subSteps;
 
   for (let i = 0; i < subSteps; i += 1) {
-    plinkoBall.vy += 0.22 * step;
+    plinkoBall.vy += plinkoGeometry.gravity * step;
     plinkoBall.x += plinkoBall.vx * step;
     plinkoBall.y += plinkoBall.vy * step;
 
@@ -874,7 +1081,7 @@ function updatePlinkoPhysics(delta) {
       plinkoBall.vy *= 0.82;
       plinkoBall.settledFrames += 1;
 
-      if (plinkoBall.settledFrames > 10 || plinkoBall.y > height * 0.925) {
+      if (plinkoBall.settledFrames > 10 || plinkoBall.y > plinkoGeometry.slotY + plinkoGeometry.slotHeight * 0.55) {
         const slot = getPlinkoSlotFromX(plinkoBall.x);
         plinkoBall.payer = slot.player;
         plinkoBall.x += (slot.centerX - plinkoBall.x) * 0.14;
@@ -887,9 +1094,8 @@ function updatePlinkoPhysics(delta) {
 }
 
 function keepPlinkoBallInsideWalls() {
-  const width = plinkoCanvas.clientWidth;
-  const left = width * 0.08 + plinkoBall.radius;
-  const right = width * 0.92 - plinkoBall.radius;
+  const left = plinkoGeometry.wallLeft + plinkoBall.radius;
+  const right = plinkoGeometry.wallRight - plinkoBall.radius;
 
   if (plinkoBall.x < left) {
     plinkoBall.x = left;
@@ -915,6 +1121,7 @@ function collidePlinkoBallWithPegs() {
       const overlap = minDistance - distance;
       const velocityAlongNormal = plinkoBall.vx * nx + plinkoBall.vy * ny;
       const tangentKick = plinkoRandomBetween(-0.08, 0.08);
+      const isBalancedOnTop = Math.abs(dx) < peg.radius * 1.25 && dy < 0;
 
       plinkoBall.x += nx * overlap;
       plinkoBall.y += ny * overlap;
@@ -926,6 +1133,13 @@ function collidePlinkoBallWithPegs() {
 
       plinkoBall.vx += -ny * tangentKick;
       plinkoBall.vy += nx * tangentKick;
+
+      if (isBalancedOnTop) {
+        plinkoBall.vx += plinkoRandomBetween(-1.25, 1.25);
+        plinkoBall.vy += 0.55;
+      }
+
+      plinkoBall.vy = Math.max(plinkoBall.vy, -1.1);
       plinkoBall.vx *= 0.985;
       plinkoBall.vy *= 0.992;
     }
@@ -935,24 +1149,26 @@ function collidePlinkoBallWithPegs() {
 function slowPlinkoBallNearSlots(slotTop) {
   if (plinkoBall.y > slotTop - 18) {
     plinkoBall.vx *= 0.97;
-    plinkoBall.vy = Math.min(plinkoBall.vy, 4.2);
+    plinkoBall.vy = Math.min(plinkoBall.vy, plinkoGeometry.maxFallSpeed);
   }
 }
 
 function preventStuckPlinkoBall() {
   const movement = Math.hypot(plinkoBall.x - plinkoBall.lastX, plinkoBall.y - plinkoBall.lastY);
+  const verticalMovement = Math.abs(plinkoBall.y - plinkoBall.lastY);
   const speed = Math.hypot(plinkoBall.vx, plinkoBall.vy);
+  const isNearTop = plinkoBall.y < plinkoCanvas.clientHeight * 0.35;
 
-  if (movement < 0.18 && speed < 0.55) {
+  if ((movement < 0.26 || verticalMovement < 0.08) && speed < 1.35) {
     plinkoBall.stuckFrames += 1;
   } else {
     plinkoBall.stuckFrames = 0;
   }
 
-  if (plinkoBall.stuckFrames > 18) {
-    plinkoBall.vx += plinkoRandomBetween(-1.4, 1.4);
-    plinkoBall.vy += 1.8;
-    plinkoBall.y += plinkoBall.radius * 0.35;
+  if (plinkoBall.stuckFrames > (isNearTop ? 10 : 18)) {
+    plinkoBall.vx += plinkoRandomBetween(-2.2, 2.2);
+    plinkoBall.vy += isNearTop ? 2.8 : 1.8;
+    plinkoBall.y += plinkoBall.radius * (isNearTop ? 0.9 : 0.35);
     plinkoBall.stuckFrames = 0;
   }
 
@@ -969,7 +1185,7 @@ function finishPlinkoDrop() {
   plinkoRoundWins[plinkoBall.payer] = (plinkoRoundWins[plinkoBall.payer] || 0) + 1;
 
   if (plinkoIsTieBreaker) {
-    result.textContent = `${plinkoBall.payer} wins the tie breaker and pays Rs. ${billAmount}!`;
+    result.textContent = `${plinkoBall.payer} wins the tie breaker and pays!`;
     roundLabel.textContent = "Final Result";
     if (winSound) winSound.play().catch(() => {});
 
@@ -1009,7 +1225,7 @@ function finishPlinkoDrop() {
   }
 
   const payer = winners[0];
-  result.textContent = `${payer} won best of 3 and pays Rs. ${billAmount}!`;
+  result.textContent = `${payer} won best of 3 and pays!`;
   roundLabel.textContent = "Final Result";
   if (winSound) winSound.play().catch(() => {});
 
@@ -1054,6 +1270,50 @@ function plinkoRandomBetween(min, max) {
 
 function trimPlinkoName(name) {
   return name.length > 7 ? `${name.slice(0, 6)}.` : name;
+}
+
+function getPlinkoBallRadius() {
+  return (plinkoGeometry || getPlinkoGeometry()).ballRadius;
+}
+
+function getPlinkoGeometry() {
+  const width = plinkoCanvas.clientWidth;
+  const height = plinkoCanvas.clientHeight;
+  const rows = height < 260 ? 7 : height < 360 ? 8 : 9;
+  const wallLeft = width * 0.09;
+  const wallRight = width * 0.91;
+  const boardWidth = wallRight - wallLeft;
+  const slotY = height * 0.78;
+  const slotHeight = Math.min(height * 0.115, 58);
+  const top = height * 0.16;
+  const availableHeight = Math.max(80, slotY - top - slotHeight * 0.18);
+  const rowGap = availableHeight / Math.max(1, rows);
+  const pegGap = boardWidth / rows;
+  const centerDistance = Math.min(pegGap, rowGap);
+  const pegRadius = clampValue(centerDistance * 0.075, 2.4, 4.8);
+  const clearGap = Math.max(6, centerDistance - pegRadius * 2);
+  const ballDiameter = clearGap * 0.7;
+  const ballRadius = clampValue(ballDiameter / 2, 5.2, 13);
+
+  return {
+    rows,
+    top,
+    rowGap,
+    pegGap,
+    pegRadius,
+    ballRadius,
+    slotY,
+    slotHeight,
+    wallLeft,
+    wallRight,
+    spawnY: Math.max(ballRadius + 4, top - rowGap * 0.9),
+    gravity: clampValue(centerDistance * 0.013, 0.16, 0.24),
+    maxFallSpeed: clampValue(centerDistance * 0.18, 2.8, 4.6)
+  };
+}
+
+function clampValue(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function drawRoundRect(ctx, x, y, width, height, radius) {
@@ -1123,6 +1383,7 @@ function showFingerChooser() {
       <button class="secondary finger-back" onclick="playTap(); stopFingerChooser(); showGameSelect()">Back</button>
 
       <div class="finger-message">
+        <div class="finger-notice">Best on mobile or touch screen</div>
         Make at least 2 players place one finger on the screen.
         <br>
         Keep holding until the countdown ends.
@@ -1285,5 +1546,7 @@ function getFingerColor(index) {
   return colors[index % colors.length];
 }
 
+loadSoundPreference();
+loadPlayers();
 drawBackground();
 showWelcome();
