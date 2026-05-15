@@ -1371,12 +1371,14 @@ let activeFingers = new Map();
 let fingerCountdownTimer = null;
 let fingerCountdownValue = 2;
 let fingerChoosingDone = false;
+let fingerPlayerOrder = [];
 
 function showFingerChooser() {
   activeFingers = new Map();
   fingerCountdownTimer = null;
   fingerCountdownValue = 2;
   fingerChoosingDone = false;
+  fingerPlayerOrder = [...players];
 
   setScreen(`
     <div id="fingerGame" class="finger-game">
@@ -1384,15 +1386,15 @@ function showFingerChooser() {
 
       <div class="finger-message">
         <div class="finger-notice">Best on mobile or touch screen</div>
-        Make at least 2 players place one finger on the screen.
-        <br>
-        Keep holding until the countdown ends.
+        <div id="fingerPrompt" class="finger-prompt"></div>
+        <div id="fingerProgress" class="finger-progress"></div>
         <span id="fingerCountdown" class="finger-countdown"></span>
       </div>
     </div>
   `);
 
   const area = document.getElementById("fingerGame");
+  updateFingerPrompt();
 
   area.addEventListener("pointerdown", handleFingerDown);
   area.addEventListener("pointermove", handleFingerMove);
@@ -1410,9 +1412,15 @@ function handleFingerDown(event) {
   const area = document.getElementById("fingerGame");
   const playerName = getNextFingerPlayerName();
 
+  if (!playerName) {
+    updateFingerPrompt();
+    return;
+  }
+
   const circle = document.createElement("div");
   circle.className = "finger-circle";
-  circle.textContent = "";
+  circle.textContent = trimFingerName(playerName);
+  circle.title = playerName;
   circle.style.background = getFingerColor(activeFingers.size);
   circle.style.left = `${event.clientX}px`;
   circle.style.top = `${event.clientY}px`;
@@ -1429,6 +1437,7 @@ function handleFingerDown(event) {
 
   area.setPointerCapture(event.pointerId);
 
+  updateFingerPrompt();
   checkFingerCountdown();
 }
 
@@ -1451,19 +1460,22 @@ function handleFingerUp(event) {
   finger.circle.remove();
   activeFingers.delete(event.pointerId);
 
-  if (activeFingers.size < 2) {
+  if (activeFingers.size !== fingerPlayerOrder.length) {
     cancelFingerCountdown();
   }
+
+  updateFingerPrompt();
 }
 
 function checkFingerCountdown() {
-  if (activeFingers.size >= 2 && !fingerCountdownTimer) {
+  if (activeFingers.size === fingerPlayerOrder.length && !fingerCountdownTimer) {
     startFingerCountdown();
   }
 }
 
 function startFingerCountdown() {
   const countdown = document.getElementById("fingerCountdown");
+  updateFingerPrompt("Everyone hold still...");
   fingerCountdownValue = 2;
   countdown.textContent = fingerCountdownValue;
 
@@ -1487,10 +1499,11 @@ function cancelFingerCountdown() {
 
   const countdown = document.getElementById("fingerCountdown");
   if (countdown) countdown.textContent = "";
+  updateFingerPrompt();
 }
 
 function chooseFingerWinner() {
-  if (activeFingers.size < 2) {
+  if (activeFingers.size < 2 || activeFingers.size !== fingerPlayerOrder.length) {
     cancelFingerCountdown();
     return;
   }
@@ -1508,7 +1521,8 @@ function chooseFingerWinner() {
   });
 
   winner.circle.classList.add("winner");
-  winner.circle.textContent = "Selected";
+  winner.circle.textContent = `${trimFingerName(winner.name)} pays`;
+  updateFingerPrompt(`${winner.name} pays the bill!`);
 
   if (navigator.vibrate) {
     navigator.vibrate([80, 40, 120]);
@@ -1526,13 +1540,38 @@ function stopFingerChooser() {
   cancelFingerCountdown();
   activeFingers.clear();
   fingerChoosingDone = false;
+  fingerPlayerOrder = [];
 }
 
 function getNextFingerPlayerName() {
   const usedNames = Array.from(activeFingers.values()).map(finger => finger.name);
-  const availableName = players.find(player => !usedNames.includes(player));
+  const availableName = fingerPlayerOrder.find(player => !usedNames.includes(player));
 
-  return availableName || players[activeFingers.size % players.length];
+  return availableName || "";
+}
+
+function updateFingerPrompt(message = "") {
+  const prompt = document.getElementById("fingerPrompt");
+  const progress = document.getElementById("fingerProgress");
+
+  if (!prompt || !progress) return;
+
+  const usedNames = Array.from(activeFingers.values()).map(finger => finger.name);
+  const nextPlayer = fingerPlayerOrder.find(player => !usedNames.includes(player));
+
+  if (message) {
+    prompt.textContent = message;
+  } else if (nextPlayer) {
+    prompt.textContent = `Touch for ${nextPlayer}`;
+  } else {
+    prompt.textContent = "Everyone keep holding";
+  }
+
+  progress.textContent = `${usedNames.length} of ${fingerPlayerOrder.length} players placed`;
+}
+
+function trimFingerName(name) {
+  return name.length > 12 ? `${name.slice(0, 11)}.` : name;
 }
 
 function getFingerColor(index) {

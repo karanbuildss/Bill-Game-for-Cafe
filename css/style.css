@@ -318,6 +318,21 @@ button.secondary {
   pointer-events: none;
 }
 
+.finger-prompt {
+  font-size: clamp(26px, 7vw, 46px);
+  font-weight: 900;
+  line-height: 1.15;
+  color: #ffffff;
+  text-shadow: 0 0 18px rgba(0, 255, 200, 0.45);
+}
+
+.finger-progress {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: clamp(14px, 3.4vw, 18px);
+  font-weight: 800;
+}
+
 .finger-notice {
   display: inline-grid;
   place-items: center;
@@ -351,9 +366,12 @@ button.secondary {
   display: grid;
   place-items: center;
   color: #05060c;
-  font-size: 14px;
+  padding: 10px;
+  font-size: 13px;
   font-weight: 900;
   text-align: center;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
   box-shadow:
     0 0 25px rgba(255, 255, 255, 0.35),
     0 0 45px currentColor;
@@ -367,7 +385,7 @@ button.secondary {
   height: 150px;
   margin-left: -75px;
   margin-top: -75px;
-  font-size: 20px;
+  font-size: 18px;
   z-index: 10;
   animation: winnerPulse 0.5s infinite alternate;
   color: #ffffff;

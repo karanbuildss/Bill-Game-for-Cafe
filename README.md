@@ -35,7 +35,7 @@ No backend, database, npm install, or build step is required.
 
 ## Notes
 
-Finger Chooser works best on mobile or touch-screen devices because it uses multi-touch input.
+Finger Chooser works best on mobile or touch-screen devices because it uses multi-touch input. It asks each saved player to place a finger one by one, then chooses from those named touches.
 
 ## Project Status
 
