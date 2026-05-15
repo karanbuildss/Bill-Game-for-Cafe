@@ -359,6 +359,7 @@ button.secondary {
     0 0 45px currentColor;
   pointer-events: none;
   animation: fingerPulse 0.9s infinite alternate;
+  border: 3px solid rgba(255, 255, 255, 0.86);
 }
 
 .finger-circle.winner {
@@ -369,6 +370,9 @@ button.secondary {
   font-size: 20px;
   z-index: 10;
   animation: winnerPulse 0.5s infinite alternate;
+  color: #ffffff;
+  background: #ff1744 !important;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
 }
 
 .finger-back {

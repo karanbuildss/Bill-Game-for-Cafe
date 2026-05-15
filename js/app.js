@@ -1412,7 +1412,7 @@ function handleFingerDown(event) {
 
   const circle = document.createElement("div");
   circle.className = "finger-circle";
-  circle.textContent = playerName;
+  circle.textContent = "";
   circle.style.background = getFingerColor(activeFingers.size);
   circle.style.left = `${event.clientX}px`;
   circle.style.top = `${event.clientY}px`;
@@ -1508,7 +1508,11 @@ function chooseFingerWinner() {
   });
 
   winner.circle.classList.add("winner");
-  winner.circle.textContent = `${winner.name} pays`;
+  winner.circle.textContent = "Selected";
+
+  if (navigator.vibrate) {
+    navigator.vibrate([80, 40, 120]);
+  }
 
   if (winSound) winSound.play().catch(() => {});
 
