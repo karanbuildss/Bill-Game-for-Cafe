@@ -2,7 +2,9 @@ const screen = document.getElementById("screen");
 const tapSound = document.getElementById("tapSound");
 const winSound = document.getElementById("winSound");
 const spinWheelSound = document.getElementById("spinWheelSound");
+const bgMusic = document.getElementById("bgMusic");
 let players = ["", ""];
+let activePlayerIndex = 0;
 let lastPlayedGame = "";
 const maxPlayerNameLength = 12;
 const storageKey = "billRoulettePlayers";
@@ -22,6 +24,19 @@ function restartSound(sound) {
   sound.pause();
   sound.currentTime = 0;
   sound.play().catch(() => {});
+}
+
+function playBackgroundMusic() {
+  if (!bgMusic || !soundEnabled) return;
+
+  bgMusic.volume = 0.32;
+  bgMusic.play().catch(() => {});
+}
+
+function stopBackgroundMusic() {
+  if (!bgMusic) return;
+
+  bgMusic.pause();
 }
 
 function getAudioContext() {
@@ -90,11 +105,12 @@ function playDiceRollSound() {
   if (!soundEnabled) return;
   stopDiceRollSound();
 
+  const faceTones = [128, 148, 166, 190, 218, 246];
+
   diceRollSoundTimer = setInterval(() => {
-    const tones = [180, 220, 260, 300, 340];
-    const tone = tones[Math.floor(Math.random() * tones.length)];
-    playTone(tone, 0.035, 0.035, "square");
-  }, 75);
+    const face = Math.floor(Math.random() * faceTones.length);
+    playDiceFaceHit(faceTones[face]);
+  }, 68);
 }
 
 function stopDiceRollSound() {
@@ -106,7 +122,115 @@ function stopDiceRollSound() {
 
 function playDiceLandSound() {
   if (!soundEnabled) return;
-  playTone(95, 0.12, 0.07, "triangle");
+  playTone(82, 0.12, 0.12, "triangle");
+  setTimeout(() => playTone(124, 0.08, 0.075, "sine"), 45);
+}
+
+function playDiceFaceHit(frequency) {
+  if (!soundEnabled) return;
+
+  const audioContext = getAudioContext();
+  if (!audioContext) return;
+
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const filter = audioContext.createBiquadFilter();
+  const now = audioContext.currentTime;
+
+  oscillator.type = "triangle";
+  oscillator.frequency.setValueAtTime(frequency, now);
+  oscillator.frequency.exponentialRampToValueAtTime(frequency * 0.72, now + 0.045);
+
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(520, now);
+  filter.Q.setValueAtTime(1.4, now);
+
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(0.09, now + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+  oscillator.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioContext.destination);
+
+  oscillator.start(now);
+  oscillator.stop(now + 0.07);
+}
+
+function playNeonHiss() {
+  if (!soundEnabled) return;
+
+  const audioContext = getAudioContext();
+  if (!audioContext) return;
+
+  const duration = 0.26;
+  const sampleCount = audioContext.sampleRate * duration;
+  const buffer = audioContext.createBuffer(1, sampleCount, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    data[index] = (Math.random() * 2 - 1) * (1 - index / sampleCount);
+  }
+
+  const noise = audioContext.createBufferSource();
+  const filter = audioContext.createBiquadFilter();
+  const gain = audioContext.createGain();
+  const now = audioContext.currentTime;
+
+  noise.buffer = buffer;
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(1400, now);
+  filter.frequency.exponentialRampToValueAtTime(4200, now + duration);
+  filter.Q.setValueAtTime(7, now);
+
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(0.105, now + 0.035);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioContext.destination);
+
+  noise.start(now);
+  noise.stop(now + duration + 0.02);
+}
+
+function playPlinkoPegSound(intensity = 1) {
+  if (!soundEnabled) return;
+
+  const nowMs = performance.now();
+  if (nowMs - lastPlinkoPegSoundTime < 42) return;
+  lastPlinkoPegSoundTime = nowMs;
+
+  const audioContext = getAudioContext();
+  if (!audioContext) return;
+
+  const now = audioContext.currentTime;
+  const volume = clampValue(0.025 + intensity * 0.018, 0.025, 0.07);
+  const baseFrequency = 760 + Math.random() * 520;
+
+  const gain = audioContext.createGain();
+  const filter = audioContext.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(baseFrequency * 1.5, now);
+  filter.Q.setValueAtTime(8, now);
+
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+
+  [baseFrequency, baseFrequency * 1.42].forEach((frequency, index) => {
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = index === 0 ? "triangle" : "sine";
+    oscillator.frequency.setValueAtTime(frequency, now);
+    oscillator.frequency.exponentialRampToValueAtTime(frequency * 0.72, now + 0.08);
+    oscillator.connect(filter);
+    oscillator.start(now);
+    oscillator.stop(now + 0.095);
+  });
+
+  filter.connect(gain);
+  gain.connect(audioContext.destination);
 }
 
 function loadSoundPreference() {
@@ -119,11 +243,12 @@ function toggleSound() {
   stopDiceRollSound();
 
   if (!soundEnabled) {
-    [tapSound, winSound, spinWheelSound].forEach(sound => {
+    [tapSound, winSound, spinWheelSound, bgMusic].forEach(sound => {
       if (sound) sound.pause();
     });
   } else {
     playTone(520, 0.06, 0.05, "triangle");
+    playBackgroundMusic();
   }
 
   updateSoundToggle();
@@ -138,6 +263,8 @@ function updateSoundToggle() {
 }
 
 function setScreen(html) {
+  cleanupScreenEffects();
+
   screen.innerHTML = `
     <button 
       id="soundToggle" 
@@ -152,6 +279,11 @@ function setScreen(html) {
   `;
 
   updateSoundToggle();
+}
+
+function cleanupScreenEffects() {
+  stopSpinWheel();
+  stopDiceRollGame();
 }
 
 function savePlayers() {
@@ -177,59 +309,116 @@ function loadPlayers() {
 function clearSavedPlayers() {
   localStorage.removeItem(storageKey);
   players = ["", ""];
+  activePlayerIndex = 0;
 }
 
 function showWelcome() {
   setScreen(`
-    <div class="panel">
-      <h1>Bill Roulette</h1>
+    <div class="panel welcome-panel">
+      <h1><span class="title-small">Bill</span><span class="title-wide">Roulette</span></h1>
       <p>A fun cafe game to decide who pays the bill.</p>
-      <button onclick="playTap(); showPlayerSetup()">Start Game</button>
+      <button class="start-button" onclick="playTap(); playBackgroundMusic(); showPlayerSetup()">Press To Start</button>
     </div>
   `);
 }
 
 function showPlayerSetup(error = "") {
+  playBackgroundMusic();
+  activePlayerIndex = Math.min(activePlayerIndex, players.length - 1);
+  const activeName = players[activePlayerIndex] || "";
+  const previousPlayers = players.slice(0, activePlayerIndex);
+
   setScreen(`
     <div class="panel setup-panel">
       <h2>Player Setup</h2>
-      <p>Add at least two players to start the game.</p>
+      <p>Enter one player at a time. Minimum 2 players required.</p>
 
-      <div id="playerInputs" class="player-input-list">
-        ${players.map((name, index) => `
-          <div class="player-input-row">
-            <input 
-            type="text" 
-            placeholder="Player ${index + 1} name" 
-            value="${name}"
-              maxlength="${maxPlayerNameLength}"
-            oninput="players[${index}] = this.value"
-            />
-            ${index >= 2 ? `
-              <button 
-                class="remove-player-btn" 
-                type="button" 
-                aria-label="Remove player ${index + 1}"
-                onclick="removePlayerInput(${index})"
-              >
-                ×
-              </button>
-            ` : ""}
+      <div class="player-summary">
+        ${previousPlayers.length ? previousPlayers.map((name, index) => `
+          <div class="player-chip">
+            <span>${index + 1}. ${escapeHTML(name || `Player ${index + 1}`)}</span>
+            ${index >= 2 ? `<button type="button" onclick="removePlayerInput(${index})">×</button>` : ""}
           </div>
-        `).join("")}
+        `).join("") : `<div class="player-empty">No players added yet</div>`}
       </div>
 
-      <button class="secondary" onclick="addPlayerInput()">Add Another Player</button>
+      <div class="active-player-card">
+        <div class="active-player-label">Player ${activePlayerIndex + 1}</div>
+        <input
+          id="activePlayerInput"
+          type="text"
+          placeholder="Enter player name"
+          value="${escapeHTML(activeName)}"
+          maxlength="${maxPlayerNameLength}"
+          oninput="updatePlayerName(${activePlayerIndex}, this.value)"
+        />
+      </div>
+
+      <div class="setup-actions">
+        ${activePlayerIndex > 0 ? `<button class="secondary" onclick="goToPreviousPlayerInput()">Previous</button>` : ""}
+        ${activePlayerIndex < players.length - 1
+          ? `<button class="secondary" onclick="goToNextPlayerInput()">Next Player</button>`
+          : `<button class="secondary" onclick="addPlayerInput()">Add Another Player</button>`
+        }
+      </div>
+
       <button onclick="goToGameSelect()">Continue</button>
 
       ${error ? `<div class="error">${error}</div>` : ""}
     </div>
   `);
+
+  const activeInput = document.getElementById("activePlayerInput");
+  if (activeInput) activeInput.focus();
+}
+
+function escapeHTML(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function updatePlayerName(index, value) {
+  players[index] = value;
+  savePlayers();
+}
+
+function currentPlayerNameIsEmpty() {
+  return !players[activePlayerIndex] || !players[activePlayerIndex].trim();
+}
+
+function goToNextPlayerInput() {
+  playTap();
+
+  if (currentPlayerNameIsEmpty()) {
+    playErrorSound();
+    showPlayerSetup(`Please enter Player ${activePlayerIndex + 1}'s name first.`);
+    return;
+  }
+
+  activePlayerIndex += 1;
+  showPlayerSetup();
+}
+
+function goToPreviousPlayerInput() {
+  playTap();
+  activePlayerIndex = Math.max(0, activePlayerIndex - 1);
+  showPlayerSetup();
 }
 
 function addPlayerInput() {
+  if (currentPlayerNameIsEmpty()) {
+    playErrorSound();
+    showPlayerSetup(`Please enter Player ${activePlayerIndex + 1}'s name first.`);
+    return;
+  }
+
   playAddPlayerSound();
   players.push("");
+  activePlayerIndex = players.length - 1;
   savePlayers();
   showPlayerSetup();
 }
@@ -239,6 +428,7 @@ function removePlayerInput(index) {
 
   playRemovePlayerSound();
   players.splice(index, 1);
+  activePlayerIndex = Math.min(activePlayerIndex, players.length - 1);
   savePlayers();
   showPlayerSetup();
 }
@@ -274,8 +464,9 @@ function goToGameSelect() {
 }
 
 function showGameSelect() {
+  playBackgroundMusic();
   setScreen(`
-    <div class="panel">
+    <div class="panel game-select-panel">
       <h2>Pick a Game</h2>
       <p>${players.length} players ready</p>
 
@@ -291,6 +482,13 @@ function showGameSelect() {
 
 function gameButton(title, desc, action) {
   let clickAction = `showPlaceholderResult('${title}')`;
+  const iconClass = action.replace("show", "").replace("Board", "").replace("Roll", "").toLowerCase();
+  const buttonLabel = {
+    showSpinWheel: "Spin Now",
+    showFingerChooser: "Choose Now",
+    showDiceRoll: "Roll Dice",
+    showPlinkoBoard: "Drop Coin"
+  }[action] || "Open";
 
   if (action === "showSpinWheel") {
     clickAction = "showSpinWheel()";
@@ -310,11 +508,28 @@ function gameButton(title, desc, action) {
 
   return `
     <div class="game-card">
+      <div class="arcade-marquee">${title}</div>
+      <div class="game-preview ${iconClass}">${getGamePreview(action)}</div>
       <strong>${title}</strong>
       <p>${desc}</p>
-      <button onclick="playTap(); ${clickAction}">Open</button>
+      <button onclick="playTap(); ${clickAction}">${buttonLabel}</button>
     </div>
   `;
+}
+
+function getGamePreview(action) {
+  const previewImages = {
+    showSpinWheel: "spinwheel-card.png",
+    showFingerChooser: "fingerchooser-card.png",
+    showDiceRoll: "diceroll-card.png",
+    showPlinkoBoard: "plinkoboard-carrd.png"
+  };
+
+  const imageName = previewImages[action];
+
+  if (!imageName) return "";
+
+  return `<img src="assets/images/${imageName}" alt="" aria-hidden="true">`;
 }
 
 
@@ -331,6 +546,7 @@ function showPlaceholderResult(gameName) {
 
 function showResult(payer, gameName) {
   lastPlayedGame = gameName;
+  playBackgroundMusic();
 
   setScreen(`
     <div class="panel">
@@ -373,6 +589,8 @@ let isWheelSpinning = false;
 let selectedWheelPayer = null;
 let wheelPlayers = [];
 let lastTickSliceIndex = -1;
+let wheelSwipeState = null;
+let wheelAnimationFrame = null;
 
 function playWheelTick(sliceIndex) {
   if (!soundEnabled) return;
@@ -402,6 +620,8 @@ function playWheelTick(sliceIndex) {
 }
 
 function showSpinWheel() {
+  stopBackgroundMusic();
+  stopSpinWheel();
   selectedWheelPayer = null;
   isWheelSpinning = false;
   wheelPlayers = shuffleItems(players);
@@ -414,9 +634,9 @@ function showSpinWheel() {
       <div class="pointer"></div>
 
 <div class="wheel-wrap">
-  <div class="wheel-stage" onclick="spinWheel()">
+  <div class="wheel-stage" id="wheelStage">
     <canvas id="wheelCanvas" width="420" height="420"></canvas>
-    <div id="wheelHint" class="wheel-hint">Tap to spin wheel</div>
+    <div id="wheelHint" class="wheel-hint">Tap or swipe to spin</div>
   </div>
 </div>
 
@@ -429,6 +649,27 @@ function showSpinWheel() {
   `);
 
   drawWheel();
+  setupWheelSwipe();
+}
+
+function stopSpinWheel() {
+  if (wheelAnimationFrame) {
+    cancelAnimationFrame(wheelAnimationFrame);
+    wheelAnimationFrame = null;
+  }
+
+  wheelSwipeState = null;
+  isWheelSpinning = false;
+
+  if (spinWheelSound) {
+    spinWheelSound.pause();
+    spinWheelSound.currentTime = 0;
+  }
+
+  if (winSound) {
+    winSound.pause();
+    winSound.currentTime = 0;
+  }
 }
 
 function drawWheel() {
@@ -508,12 +749,99 @@ const colors = [
   ctx.fillText("PAY", center, center + 5);
 }
 
-function spinWheel() {
-  if (isWheelSpinning) return;
+function setupWheelSwipe() {
+  const stage = document.getElementById("wheelStage");
+  if (!stage) return;
+
+  stage.addEventListener("pointerdown", event => {
+    if (isWheelSpinning || selectedWheelPayer) return;
+
+    stage.setPointerCapture(event.pointerId);
+    const angle = getPointerWheelAngle(event, stage);
+    wheelSwipeState = {
+      pointerId: event.pointerId,
+      startAngle: angle,
+      lastAngle: angle,
+      startTime: performance.now(),
+      totalMovement: 0
+    };
+  });
+
+  stage.addEventListener("pointermove", event => {
+    if (!wheelSwipeState || wheelSwipeState.pointerId !== event.pointerId || isWheelSpinning) return;
+
+    const angle = getPointerWheelAngle(event, stage);
+    const delta = shortestAngleDelta(angle, wheelSwipeState.lastAngle);
+    wheelSwipeState.totalMovement += Math.abs(delta);
+    wheelSwipeState.lastAngle = angle;
+    wheelAngle += delta;
+    drawWheel();
+  });
+
+  stage.addEventListener("pointerup", event => finishWheelSwipe(event, stage));
+  stage.addEventListener("pointercancel", () => {
+    wheelSwipeState = null;
+  });
+}
+
+function finishWheelSwipe(event, stage) {
+  if (!wheelSwipeState || wheelSwipeState.pointerId !== event.pointerId || isWheelSpinning || selectedWheelPayer) {
+    wheelSwipeState = null;
+    return;
+  }
+
+  const elapsed = Math.max(performance.now() - wheelSwipeState.startTime, 1);
+  const signedTravel = shortestAngleDelta(wheelSwipeState.lastAngle, wheelSwipeState.startAngle);
+  const travel = Math.max(Math.abs(signedTravel), wheelSwipeState.totalMovement);
+  const velocity = travel / elapsed;
+  const isTap = travel < 0.18;
+  const minTravel = 0.55;
+  const minVelocity = 0.0048;
+
+  wheelSwipeState = null;
+
+  if (isTap) {
+    spinWheel(1);
+    return;
+  }
+
+  if (travel < minTravel || velocity < minVelocity) {
+    const wheelHint = document.getElementById("wheelHint");
+    if (wheelHint) {
+      wheelHint.classList.remove("hidden");
+      wheelHint.textContent = "Swipe faster";
+    }
+    playErrorSound();
+    return;
+  }
+
+  const power = clampValue((velocity / minVelocity) * 0.7 + (travel / (Math.PI * 2)) * 0.55, 0.85, 2.4);
+  spinWheel(power);
+}
+
+function getPointerWheelAngle(event, element) {
+  const rect = element.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  return Math.atan2(event.clientY - centerY, event.clientX - centerX);
+}
+
+function shortestAngleDelta(angle, previousAngle) {
+  let delta = angle - previousAngle;
+
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+
+  return delta;
+}
+
+function spinWheel(power = 1) {
+  if (isWheelSpinning || selectedWheelPayer) return;
 
   playTap();
   lastTickSliceIndex = -1;
   isWheelSpinning = true;
+  power = clampValue(power, 0.8, 2.4);
 
   const spinBtn = document.getElementById("spinBtn");
   const resultBox = document.getElementById("spinResult");
@@ -533,15 +861,20 @@ if (wheelHint) wheelHint.classList.add("hidden");
   const targetAngle = pointerAngle - selectedIndex * slice - slice / 2;
 
   const startAngle = wheelAngle;
-  const extraSpins = 6 + Math.floor(Math.random() * 3);
+  const extraSpins = Math.round(4 + power * 3.2 + Math.floor(Math.random() * 2));
   const currentRotation = startAngle % (Math.PI * 2);
   const neededRotation = normalizeAngle(targetAngle - currentRotation);
   const finalAngle = startAngle + extraSpins * Math.PI * 2 + neededRotation;
 
-  const duration = 3600;
+  const duration = 2400 + power * 900;
   const startTime = performance.now();
 
   function animate(now) {
+    if (!document.getElementById("wheelCanvas")) {
+      stopSpinWheel();
+      return;
+    }
+
     const progress = Math.min((now - startTime) / duration, 1);
     const eased = easeOutCubic(progress);
 
@@ -556,13 +889,14 @@ if (wheelHint) wheelHint.classList.add("hidden");
     }
 
     if (progress < 1) {
-      requestAnimationFrame(animate);
+      wheelAnimationFrame = requestAnimationFrame(animate);
     } else {
+      wheelAnimationFrame = null;
       finishSpin();
     }
   }
 
-  requestAnimationFrame(animate);
+  wheelAnimationFrame = requestAnimationFrame(animate);
 }
 
 function getSliceUnderPointer() {
@@ -610,18 +944,30 @@ let diceIsRolling = false;
 let diceRoundNumber = 1;
 let diceRoundWins = {};
 let diceIsTieBreaker = false;
-const diceBestOfRounds = 3;
+let diceTumbleTimeout = null;
+let diceSettleTimeout = null;
 
 const diceFaceRotations = {
-  1: "rotateX(-10deg) rotateY(14deg)",
-  2: "rotateX(-10deg) rotateY(-76deg)",
-  3: "rotateX(-100deg) rotateY(14deg)",
-  4: "rotateX(80deg) rotateY(14deg)",
-  5: "rotateX(-10deg) rotateY(104deg)",
-  6: "rotateX(-10deg) rotateY(194deg)"
+  1: "rotateX(-22deg) rotateY(34deg) rotateZ(-8deg)",
+  2: "rotateX(-20deg) rotateY(-58deg) rotateZ(8deg)",
+  3: "rotateX(-104deg) rotateY(30deg) rotateZ(-9deg)",
+  4: "rotateX(76deg) rotateY(30deg) rotateZ(9deg)",
+  5: "rotateX(-20deg) rotateY(122deg) rotateZ(-8deg)",
+  6: "rotateX(-22deg) rotateY(214deg) rotateZ(8deg)"
 };
 
-function showDiceRoll(roundPlayers = players, message = "Best of 3 rounds. Highest roll wins each round.", roundNumber = 1, roundWins = null, isTieBreaker = false) {
+const diceFaceClasses = {
+  1: "showing-front",
+  2: "showing-right",
+  3: "showing-top",
+  4: "showing-bottom",
+  5: "showing-left",
+  6: "showing-back"
+};
+
+function showDiceRoll(roundPlayers = players, message = "Highest roll pays the bill. Tie breaker only if needed.", roundNumber = 1, roundWins = null, isTieBreaker = false) {
+  stopBackgroundMusic();
+  stopDiceRollGame();
   dicePlayers = [...roundPlayers];
   diceScores = [];
   diceCurrentIndex = 0;
@@ -630,7 +976,7 @@ function showDiceRoll(roundPlayers = players, message = "Best of 3 rounds. Highe
   diceRoundWins = roundWins || createScoreMap(players);
   diceIsTieBreaker = isTieBreaker;
 
-  const roundLabel = diceIsTieBreaker ? "Tie Breaker" : `Round ${diceRoundNumber} of ${diceBestOfRounds}`;
+  const roundLabel = diceIsTieBreaker ? "Tie Breaker" : "One Round";
 
   setScreen(`
     <div class="panel dice-panel">
@@ -655,6 +1001,21 @@ function showDiceRoll(roundPlayers = players, message = "Best of 3 rounds. Highe
   `);
 
   renderDiceScoreboard();
+}
+
+function stopDiceRollGame() {
+  if (diceTumbleTimeout) {
+    clearTimeout(diceTumbleTimeout);
+    diceTumbleTimeout = null;
+  }
+
+  if (diceSettleTimeout) {
+    clearTimeout(diceSettleTimeout);
+    diceSettleTimeout = null;
+  }
+
+  stopDiceRollSound();
+  diceIsRolling = false;
 }
 
 function getDiceFacesHtml() {
@@ -715,19 +1076,34 @@ function rollDiceForPlayer() {
 
   rollBtn.disabled = true;
   diceValue.textContent = `${currentPlayer} is rolling...`;
-  dice.classList.remove("landed");
+  dice.classList.remove("landed", ...Object.values(diceFaceClasses));
   dice.classList.add("rolling");
   dice.style.animationDuration = `${250 + Math.floor(Math.random() * 170)}ms`;
 
-  setTimeout(() => {
+  diceTumbleTimeout = setTimeout(() => {
+    diceTumbleTimeout = null;
+
+    if (!document.getElementById("gameDice")) {
+      stopDiceRollGame();
+      return;
+    }
+
     dice.classList.remove("rolling");
     stopDiceRollSound();
     playDiceLandSound();
     dice.style.transitionDuration = `${settleTime}ms`;
     dice.style.transform = `${diceFaceRotations[value]} rotateX(${extraX}deg) rotateY(${extraY}deg) rotateZ(${extraZ}deg) scale(1.08)`;
 
-    setTimeout(() => {
-      dice.classList.add("landed");
+    diceSettleTimeout = setTimeout(() => {
+      diceSettleTimeout = null;
+
+      if (!document.getElementById("gameDice")) {
+        stopDiceRollGame();
+        return;
+      }
+
+      dice.classList.add("landed", diceFaceClasses[value]);
+      playNeonHiss();
       diceScores.push({ name: currentPlayer, value });
       diceValue.textContent = `${currentPlayer} rolled ${value}`;
       diceCurrentIndex += 1;
@@ -754,7 +1130,7 @@ function renderDiceScoreboard() {
     return `
       <div class="dice-score-row">
         <span>${player}</span>
-        <strong>${score ? score.value : "-"} | ${diceRoundWins[player] || 0}W</strong>
+        <strong>${score ? score.value : "-"}</strong>
       </div>
     `;
   }).join("");
@@ -772,47 +1148,18 @@ function finishDiceRound() {
   if (winners.length > 1) {
     const tiedPlayers = winners.map(score => score.name);
     diceTurn.textContent = "Tie!";
-    diceMessage.textContent = `${tiedPlayers.join(", ")} tied with ${highest}. Replay this round.`;
-    rollBtn.textContent = "Replay Tied Round";
+    diceMessage.textContent = `${tiedPlayers.join(", ")} tied with ${highest}. Tie breaker decides now.`;
+    rollBtn.textContent = "Start Tie Breaker";
     rollBtn.onclick = function () {
       playTap();
-      showDiceRoll(tiedPlayers, `Tie in round ${diceRoundNumber}. Highest roll wins this round.`, diceRoundNumber, diceRoundWins, diceIsTieBreaker);
+      showDiceRoll(tiedPlayers, "Tie breaker. Highest roll pays.", diceRoundNumber, diceRoundWins, true);
     };
     return;
   }
 
-  const roundWinner = winners[0].name;
-  diceRoundWins[roundWinner] = (diceRoundWins[roundWinner] || 0) + 1;
-  renderDiceScoreboard();
-
-  if (!diceIsTieBreaker && diceRoundNumber < diceBestOfRounds) {
-    diceTurn.textContent = `${roundWinner} wins round ${diceRoundNumber}`;
-    diceMessage.textContent = `${roundWinner} scored a round win.`;
-    rollBtn.textContent = `Start Round ${diceRoundNumber + 1}`;
-    rollBtn.onclick = function () {
-      playTap();
-      showDiceRoll(players, "Best of 3 rounds. Highest roll wins each round.", diceRoundNumber + 1, diceRoundWins);
-    };
-    return;
-  }
-
-  const highestWins = Math.max(...Object.values(diceRoundWins));
-  const finalWinners = Object.keys(diceRoundWins).filter(player => diceRoundWins[player] === highestWins);
-
-  if (finalWinners.length > 1) {
-    diceTurn.textContent = "Final Tie!";
-    diceMessage.textContent = `${finalWinners.join(", ")} tied with ${highestWins} round wins.`;
-    rollBtn.textContent = "Start Final Tie Breaker";
-    rollBtn.onclick = function () {
-      playTap();
-      showDiceRoll(finalWinners, "Final tie breaker. Highest roll pays.", diceRoundNumber, diceRoundWins, true);
-    };
-    return;
-  }
-
-  const payer = finalWinners[0];
+  const payer = winners[0].name;
   diceTurn.textContent = `${payer} pays!`;
-  diceMessage.textContent = `${payer} won the best of 3.`;
+  diceMessage.textContent = `${payer} rolled the highest number.`;
   rollBtn.textContent = "Continue";
   rollBtn.onclick = function () {
     playTap();
@@ -836,9 +1183,11 @@ let plinkoRoundWins = {};
 let plinkoActivePlayers = [];
 let plinkoIsTieBreaker = false;
 let plinkoGeometry = null;
+let lastPlinkoPegSoundTime = 0;
 const plinkoBestOfRounds = 3;
 
 function showPlinkoBoard() {
+  stopBackgroundMusic();
   stopPlinkoBoard();
   plinkoRoundNumber = 1;
   plinkoRoundWins = createScoreMap(players);
@@ -917,18 +1266,19 @@ function createPlinkoSlots() {
     plinkoGeometry = getPlinkoGeometry();
   }
 
-  const width = plinkoCanvas.clientWidth;
-  const slotWidth = width / plinkoSlotPlayers.length;
+  const boardLeft = plinkoGeometry.wallLeft;
+  const boardWidth = plinkoGeometry.wallRight - plinkoGeometry.wallLeft;
+  const slotWidth = boardWidth / plinkoSlotPlayers.length;
   const slotY = plinkoGeometry.slotY;
   const slotHeight = plinkoGeometry.slotHeight;
 
   plinkoSlots = plinkoSlotPlayers.map((player, index) => ({
     player,
-    x: index * slotWidth,
+    x: boardLeft + index * slotWidth,
     y: slotY,
     width: slotWidth,
     height: slotHeight,
-    centerX: index * slotWidth + slotWidth / 2
+    centerX: boardLeft + index * slotWidth + slotWidth / 2
   }));
 }
 
@@ -939,11 +1289,12 @@ function drawPlinkoBoard() {
   plinkoCtx.clearRect(0, 0, width, height);
   drawPlinkoBackground(width, height);
   drawPlinkoPegs();
-  drawPlinkoSlots();
 
   if (plinkoBall) {
     drawPlinkoBall(plinkoBall.x, plinkoBall.y, plinkoBall.radius);
   }
+
+  drawPlinkoSlots();
 }
 
 function drawPlinkoBackground(width, height) {
@@ -973,26 +1324,57 @@ function drawPlinkoPegs() {
 
 function drawPlinkoSlots() {
   const colors = ["#ff1744", "#ff9100", "#ffea00", "#00e676", "#00b0ff", "#651fff", "#f50057"];
-  const slotFontSize = Math.max(12, Math.min(15, plinkoCanvas.clientWidth / (plinkoSlotPlayers.length * 5.8)));
 
   plinkoSlots.forEach((slot, index) => {
-    plinkoCtx.save();
-    plinkoCtx.fillStyle = colors[index % colors.length];
-    plinkoCtx.shadowColor = colors[index % colors.length];
-    plinkoCtx.shadowBlur = 14;
-    plinkoCtx.beginPath();
-    drawRoundRect(plinkoCtx, slot.x + 4, slot.y, slot.width - 8, slot.height, 10);
-    plinkoCtx.fill();
-    plinkoCtx.restore();
+    const x = slot.x + 4;
+    const y = slot.y;
+    const width = slot.width - 8;
+    const height = slot.height;
+    const color = colors[index % colors.length];
 
     plinkoCtx.save();
-    plinkoCtx.fillStyle = index === 2 ? "#05060c" : "#ffffff";
-    plinkoCtx.font = `700 ${slotFontSize}px Arial`;
+    plinkoCtx.fillStyle = "rgba(7, 8, 18, 0.82)";
+    plinkoCtx.fillRect(x, y, width, height);
+
+    const gradient = plinkoCtx.createLinearGradient(x, y, x + width, y);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(1, "rgba(255, 255, 255, 0.18)");
+
+    plinkoCtx.strokeStyle = gradient;
+    plinkoCtx.lineWidth = 4;
+    plinkoCtx.shadowColor = color;
+    plinkoCtx.shadowBlur = 13;
+    plinkoCtx.beginPath();
+    plinkoCtx.moveTo(x, y + 2);
+    plinkoCtx.lineTo(x, y + height - 8);
+    plinkoCtx.quadraticCurveTo(x, y + height, x + 8, y + height);
+    plinkoCtx.lineTo(x + width - 8, y + height);
+    plinkoCtx.quadraticCurveTo(x + width, y + height, x + width, y + height - 8);
+    plinkoCtx.lineTo(x + width, y + 2);
+    plinkoCtx.stroke();
+
+    plinkoCtx.shadowBlur = 0;
+    plinkoCtx.fillStyle = "#ffffff";
     plinkoCtx.textAlign = "center";
     plinkoCtx.textBaseline = "middle";
-    plinkoCtx.fillText(trimPlinkoName(slot.player), slot.centerX, slot.y + slot.height / 2);
+    plinkoCtx.lineWidth = 3;
+    plinkoCtx.strokeStyle = "rgba(0, 0, 0, 0.65)";
+    drawFittedPlinkoText(trimPlinkoName(slot.player), slot.centerX, slot.y + slot.height / 2, width - 10, height);
     plinkoCtx.restore();
   });
+}
+
+function drawFittedPlinkoText(text, x, y, maxWidth, slotHeight) {
+  let fontSize = Math.min(15, Math.max(9, slotHeight * 0.32));
+
+  do {
+    plinkoCtx.font = `900 ${fontSize}px Arial`;
+    if (plinkoCtx.measureText(text).width <= maxWidth || fontSize <= 8) break;
+    fontSize -= 1;
+  } while (fontSize > 8);
+
+  plinkoCtx.strokeText(text, x, y);
+  plinkoCtx.fillText(text, x, y);
 }
 
 function drawPlinkoBall(x, y, radius) {
@@ -1042,6 +1424,7 @@ function dropPlinkoBall() {
     payer: ""
   };
 
+  lastPlinkoPegSoundTime = 0;
   plinkoLastTime = performance.now();
   plinkoAnimationFrame = requestAnimationFrame(animatePlinkoDrop);
 }
@@ -1120,6 +1503,7 @@ function collidePlinkoBallWithPegs() {
       const ny = dy / distance;
       const overlap = minDistance - distance;
       const velocityAlongNormal = plinkoBall.vx * nx + plinkoBall.vy * ny;
+      const impactStrength = Math.abs(velocityAlongNormal) + Math.hypot(plinkoBall.vx, plinkoBall.vy) * 0.18;
       const tangentKick = plinkoRandomBetween(-0.08, 0.08);
       const isBalancedOnTop = Math.abs(dx) < peg.radius * 1.25 && dy < 0;
 
@@ -1129,6 +1513,7 @@ function collidePlinkoBallWithPegs() {
       if (velocityAlongNormal < 0) {
         plinkoBall.vx -= (1.72 * velocityAlongNormal) * nx;
         plinkoBall.vy -= (1.72 * velocityAlongNormal) * ny;
+        playPlinkoPegSound(impactStrength);
       }
 
       plinkoBall.vx += -ny * tangentKick;
@@ -1369,14 +1754,19 @@ function drawBackground() {
 }
 let activeFingers = new Map();
 let fingerCountdownTimer = null;
-let fingerCountdownValue = 2;
+let fingerGlowTimer = null;
+let fingerResultTimer = null;
+let fingerCountdownValue = 5;
 let fingerChoosingDone = false;
 let fingerPlayerOrder = [];
 
 function showFingerChooser() {
+  stopBackgroundMusic();
   activeFingers = new Map();
   fingerCountdownTimer = null;
-  fingerCountdownValue = 2;
+  fingerGlowTimer = null;
+  fingerResultTimer = null;
+  fingerCountdownValue = 5;
   fingerChoosingDone = false;
   fingerPlayerOrder = [...players];
 
@@ -1419,9 +1809,7 @@ function handleFingerDown(event) {
 
   const circle = document.createElement("div");
   circle.className = "finger-circle";
-  circle.textContent = trimFingerName(playerName);
   circle.title = playerName;
-  circle.style.background = getFingerColor(activeFingers.size);
   circle.style.left = `${event.clientX}px`;
   circle.style.top = `${event.clientY}px`;
 
@@ -1476,8 +1864,9 @@ function checkFingerCountdown() {
 function startFingerCountdown() {
   const countdown = document.getElementById("fingerCountdown");
   updateFingerPrompt("Everyone hold still...");
-  fingerCountdownValue = 2;
+  fingerCountdownValue = 5;
   countdown.textContent = fingerCountdownValue;
+  startFingerGlowCycle();
 
   fingerCountdownTimer = setInterval(() => {
     fingerCountdownValue -= 1;
@@ -1487,6 +1876,7 @@ function startFingerCountdown() {
     } else {
       clearInterval(fingerCountdownTimer);
       fingerCountdownTimer = null;
+      stopFingerGlowCycle();
       chooseFingerWinner();
     }
   }, 1000);
@@ -1495,11 +1885,35 @@ function startFingerCountdown() {
 function cancelFingerCountdown() {
   clearInterval(fingerCountdownTimer);
   fingerCountdownTimer = null;
-  fingerCountdownValue = 2;
+  stopFingerGlowCycle();
+  fingerCountdownValue = 5;
 
   const countdown = document.getElementById("fingerCountdown");
   if (countdown) countdown.textContent = "";
+  activeFingers.forEach(finger => {
+    finger.circle.classList.remove("scanning");
+  });
   updateFingerPrompt();
+}
+
+function startFingerGlowCycle() {
+  stopFingerGlowCycle();
+
+  fingerGlowTimer = setInterval(() => {
+    const fingers = Array.from(activeFingers.values());
+    if (!fingers.length) return;
+
+    fingers.forEach(finger => finger.circle.classList.remove("scanning"));
+    const activeFinger = fingers[Math.floor(Math.random() * fingers.length)];
+    activeFinger.circle.classList.add("scanning");
+  }, 170);
+}
+
+function stopFingerGlowCycle() {
+  if (!fingerGlowTimer) return;
+
+  clearInterval(fingerGlowTimer);
+  fingerGlowTimer = null;
 }
 
 function chooseFingerWinner() {
@@ -1515,29 +1929,35 @@ function chooseFingerWinner() {
 
   fingers.forEach(finger => {
     if (finger.id !== winner.id) {
-      finger.circle.style.opacity = "0.2";
-      finger.circle.style.transform = "scale(0.75)";
+      finger.circle.classList.add("not-winner");
+    }
+
+    if (finger.id === winner.id) {
+      finger.circle.classList.remove("scanning");
     }
   });
 
   winner.circle.classList.add("winner");
-  winner.circle.textContent = `${trimFingerName(winner.name)} pays`;
-  updateFingerPrompt(`${winner.name} pays the bill!`);
+  updateFingerPrompt("Selected finger pays the bill!");
 
   if (navigator.vibrate) {
-    navigator.vibrate([80, 40, 120]);
+    navigator.vibrate([140, 70, 180, 70, 240]);
   }
 
-  if (winSound) winSound.play().catch(() => {});
-
-  setTimeout(() => {
+  fingerResultTimer = setTimeout(() => {
+    fingerResultTimer = null;
     stopFingerChooser();
-    showResult(winner.name, "Finger Chooser");
-  }, 1800);
+    showResult("Selected Finger", "Finger Chooser");
+  }, 2200);
 }
 
 function stopFingerChooser() {
   cancelFingerCountdown();
+  if (fingerResultTimer) {
+    clearTimeout(fingerResultTimer);
+    fingerResultTimer = null;
+  }
+
   activeFingers.clear();
   fingerChoosingDone = false;
   fingerPlayerOrder = [];
@@ -1572,21 +1992,6 @@ function updateFingerPrompt(message = "") {
 
 function trimFingerName(name) {
   return name.length > 12 ? `${name.slice(0, 11)}.` : name;
-}
-
-function getFingerColor(index) {
-  const colors = [
-    "#00ffc8",
-    "#ff3df2",
-    "#ffea00",
-    "#00b0ff",
-    "#ff1744",
-    "#76ff03",
-    "#ff9100",
-    "#b197fc"
-  ];
-
-  return colors[index % colors.length];
 }
 
 loadSoundPreference();
