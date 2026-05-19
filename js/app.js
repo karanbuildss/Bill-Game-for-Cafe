@@ -487,7 +487,7 @@ function gameButton(title, desc, action) {
     showSpinWheel: "Spin Now",
     showFingerChooser: "Choose Now",
     showDiceRoll: "Roll Dice",
-    showPlinkoBoard: "Drop Coin"
+    showPlinkoBoard: "Drop Ball"
   }[action] || "Open";
 
   if (action === "showSpinWheel") {
