@@ -9,28 +9,47 @@ let lastPlayedGame = "";
 const maxPlayerNameLength = 12;
 const storageKey = "billRoulettePlayers";
 const soundStorageKey = "billRouletteSoundEnabled";
+const normalBgVolume = 0.32;
+const gameBgVolume = 0.11;
+const victorySoundVolume = 0.42;
 let appAudioContext = null;
 let diceRollSoundTimer = null;
 let soundEnabled = true;
 
 function playTap() {
   if (!soundEnabled) return;
-  playTone(260, 0.045, 0.045, "sine");
+  playTone(260, 0.045, 0.06, "sine");
 }
 
 function restartSound(sound) {
   if (!sound || !soundEnabled) return;
+
+  if (sound === winSound) {
+    sound.volume = victorySoundVolume;
+  }
 
   sound.pause();
   sound.currentTime = 0;
   sound.play().catch(() => {});
 }
 
-function playBackgroundMusic() {
+function playVictorySound() {
+  if (!winSound || !soundEnabled) return;
+
+  winSound.volume = victorySoundVolume;
+  winSound.currentTime = 0;
+  winSound.play().catch(() => {});
+}
+
+function playBackgroundMusic(volume = normalBgVolume) {
   if (!bgMusic || !soundEnabled) return;
 
-  bgMusic.volume = 0.32;
+  bgMusic.volume = volume;
   bgMusic.play().catch(() => {});
+}
+
+function playGameBackgroundMusic() {
+  playBackgroundMusic(gameBgVolume);
 }
 
 function stopBackgroundMusic() {
@@ -80,20 +99,20 @@ function playTone(frequency, duration = 0.08, volume = 0.08, type = "sine") {
 
 function playAddPlayerSound() {
   if (!soundEnabled) return;
-  playTone(420, 0.055, 0.055, "triangle");
-  setTimeout(() => playTone(620, 0.06, 0.05, "triangle"), 45);
+  playTone(420, 0.055, 0.075, "triangle");
+  setTimeout(() => playTone(620, 0.06, 0.07, "triangle"), 45);
 }
 
 function playRemovePlayerSound() {
   if (!soundEnabled) return;
-  playTone(360, 0.055, 0.05, "triangle");
-  setTimeout(() => playTone(220, 0.07, 0.045, "triangle"), 45);
+  playTone(360, 0.055, 0.07, "triangle");
+  setTimeout(() => playTone(220, 0.07, 0.06, "triangle"), 45);
 }
 
 function playErrorSound() {
   if (!soundEnabled) return;
-  playTone(130, 0.12, 0.06, "sawtooth");
-  setTimeout(() => playTone(105, 0.1, 0.05, "sawtooth"), 80);
+  playTone(130, 0.12, 0.08, "sawtooth");
+  setTimeout(() => playTone(105, 0.1, 0.07, "sawtooth"), 80);
 
   if (navigator.vibrate) {
     navigator.vibrate(120);
@@ -122,8 +141,8 @@ function stopDiceRollSound() {
 
 function playDiceLandSound() {
   if (!soundEnabled) return;
-  playTone(82, 0.12, 0.12, "triangle");
-  setTimeout(() => playTone(124, 0.08, 0.075, "sine"), 45);
+  playTone(82, 0.12, 0.16, "triangle");
+  setTimeout(() => playTone(50, 0.08, 1, "sine"), 45);
 }
 
 function playDiceFaceHit(frequency) {
@@ -146,8 +165,8 @@ function playDiceFaceHit(frequency) {
   filter.Q.setValueAtTime(1.4, now);
 
   gain.gain.setValueAtTime(0.001, now);
-  gain.gain.exponentialRampToValueAtTime(0.09, now + 0.006);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+  gain.gain.exponentialRampToValueAtTime(1.0, now + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.5, now + 0.06);
 
   oscillator.connect(filter);
   filter.connect(gain);
@@ -184,8 +203,8 @@ function playNeonHiss() {
   filter.Q.setValueAtTime(7, now);
 
   gain.gain.setValueAtTime(0.001, now);
-  gain.gain.exponentialRampToValueAtTime(0.105, now + 0.035);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  gain.gain.exponentialRampToValueAtTime(0.5, now + 0.035);
+  gain.gain.exponentialRampToValueAtTime(0.1, now + duration);
 
   noise.connect(filter);
   filter.connect(gain);
@@ -206,7 +225,7 @@ function playPlinkoPegSound(intensity = 1) {
   if (!audioContext) return;
 
   const now = audioContext.currentTime;
-  const volume = clampValue(0.025 + intensity * 0.018, 0.025, 0.07);
+  const volume = clampValue(0.04 + intensity * 0.026, 0.04, 0.105);
   const baseFrequency = 760 + Math.random() * 520;
 
   const gain = audioContext.createGain();
@@ -519,10 +538,10 @@ function gameButton(title, desc, action) {
 
 function getGamePreview(action) {
   const previewImages = {
-    showSpinWheel: "spinwheel-card.png",
-    showFingerChooser: "fingerchooser-card.png",
-    showDiceRoll: "diceroll-card.png",
-    showPlinkoBoard: "plinkoboard-carrd.png"
+    showSpinWheel: "spinwheel-card.jpg",
+    showFingerChooser: "fingerchooser-card.jpg",
+    showDiceRoll: "diceroll-card.jpg",
+    showPlinkoBoard: "plinkoboard-carrd.jpg"
   };
 
   const imageName = previewImages[action];
@@ -539,7 +558,7 @@ function showPlaceholderResult(gameName) {
   const payer = players[Math.floor(Math.random() * players.length)];
 
   setTimeout(() => {
-    if (winSound) winSound.play().catch(() => {});
+    playVictorySound();
     showResult(payer, gameName);
   }, 300);
 }
@@ -609,7 +628,7 @@ function playWheelTick(sliceIndex) {
   oscillator.frequency.value = frequency;
 
   gain.gain.setValueAtTime(0.001, now);
-  gain.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.17, now + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
 
   oscillator.connect(gain);
@@ -620,7 +639,7 @@ function playWheelTick(sliceIndex) {
 }
 
 function showSpinWheel() {
-  stopBackgroundMusic();
+  playGameBackgroundMusic();
   stopSpinWheel();
   selectedWheelPayer = null;
   isWheelSpinning = false;
@@ -966,7 +985,7 @@ const diceFaceClasses = {
 };
 
 function showDiceRoll(roundPlayers = players, message = "Highest roll pays the bill. Tie breaker only if needed.", roundNumber = 1, roundWins = null, isTieBreaker = false) {
-  stopBackgroundMusic();
+  playGameBackgroundMusic();
   stopDiceRollGame();
   dicePlayers = [...roundPlayers];
   diceScores = [];
@@ -1166,7 +1185,7 @@ function finishDiceRound() {
     showResult(payer, "Dice Roll");
   };
 
-  if (winSound) winSound.play().catch(() => {});
+  playVictorySound();
 }
 
 let plinkoCanvas = null;
@@ -1187,7 +1206,7 @@ let lastPlinkoPegSoundTime = 0;
 const plinkoBestOfRounds = 3;
 
 function showPlinkoBoard() {
-  stopBackgroundMusic();
+  playGameBackgroundMusic();
   stopPlinkoBoard();
   plinkoRoundNumber = 1;
   plinkoRoundWins = createScoreMap(players);
@@ -1511,8 +1530,8 @@ function collidePlinkoBallWithPegs() {
       plinkoBall.y += ny * overlap;
 
       if (velocityAlongNormal < 0) {
-        plinkoBall.vx -= (1.72 * velocityAlongNormal) * nx;
-        plinkoBall.vy -= (1.72 * velocityAlongNormal) * ny;
+        plinkoBall.vx -= (2.00 * velocityAlongNormal) * nx;
+        plinkoBall.vy -= (2.00* velocityAlongNormal) * ny;
         playPlinkoPegSound(impactStrength);
       }
 
@@ -1572,7 +1591,7 @@ function finishPlinkoDrop() {
   if (plinkoIsTieBreaker) {
     result.textContent = `${plinkoBall.payer} wins the tie breaker and pays!`;
     roundLabel.textContent = "Final Result";
-    if (winSound) winSound.play().catch(() => {});
+    playVictorySound();
 
     dropBtn.textContent = "Continue";
     dropBtn.onclick = function () {
@@ -1612,7 +1631,7 @@ function finishPlinkoDrop() {
   const payer = winners[0];
   result.textContent = `${payer} won best of 3 and pays!`;
   roundLabel.textContent = "Final Result";
-  if (winSound) winSound.play().catch(() => {});
+  playVictorySound();
 
   dropBtn.textContent = "Continue";
   dropBtn.onclick = function () {
@@ -1692,8 +1711,8 @@ function getPlinkoGeometry() {
     wallLeft,
     wallRight,
     spawnY: Math.max(ballRadius + 4, top - rowGap * 0.9),
-    gravity: clampValue(centerDistance * 0.013, 0.16, 0.24),
-    maxFallSpeed: clampValue(centerDistance * 0.18, 2.8, 4.6)
+    gravity: clampValue(centerDistance * 0.008, 0.16, 0.24),
+    maxFallSpeed: clampValue(centerDistance * 0.008, 2.8, 4.6)
   };
 }
 
@@ -1761,7 +1780,7 @@ let fingerChoosingDone = false;
 let fingerPlayerOrder = [];
 
 function showFingerChooser() {
-  stopBackgroundMusic();
+  playGameBackgroundMusic();
   activeFingers = new Map();
   fingerCountdownTimer = null;
   fingerGlowTimer = null;

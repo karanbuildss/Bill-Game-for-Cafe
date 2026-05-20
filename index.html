@@ -8,6 +8,7 @@
 </head>
 <body>
     <canvas id="bgCanvas"></canvas>
+    <div id="particles-js" style="width: 80%;position:absolute;top:50%;right:50%;transform:translate(50%,-50%)"></div>
     <main class="app">
         <section id="screen"></section>
     </main>
@@ -16,5 +17,92 @@
     <audio src="assets/sounds/spinwheel.mp3" id="spinWheelSound"></audio>
     <audio src="assets/sounds/bg-sound.mp3" id="bgMusic" loop></audio>
     <script src="js/app.js"></script>
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+
+    <script>
+        particlesJS('particles-js', {
+            "particles": {
+                "number": {
+                    "value": 120, /* Total cluster density */
+                    "density": {
+                        "enable": true,
+                        "value_area": 800
+                    }
+                },
+                /* Randomizes the neon palette found in your design */
+                "color": {
+                    "value": ["#15ffe0", "#ff43df"]
+                },
+                /* Combines circles and sharper polygonal debris */
+                "shape": {
+                    "type": ["circle","circle", "star"],
+                    // "polygon": {
+                    //     "nb_sides": 6
+                    // }
+                },
+                /* Varies opacity randomly to establish spatial depth */
+                "opacity": {
+                    "value": 0.9,
+                    "random": true,
+                    "anim": {
+                        "enable": true,
+                        "speed": 1,
+                        "opacity_min": 0.2,
+                        "sync": false
+                    }
+                },
+                /* Tweak sizing dynamically to separate far-off stars from up-close fragments */
+                "size": {
+                    "value": 6,
+                    "random": true,
+                    "anim": {
+                        "enable": false
+                    }
+                },
+                /* Disables lines explicitly to stop the connected node appearance */
+                "line_linked": {
+                    "enable": false
+                },
+                /* Slow, floating drift settings */
+                "move": {
+                    "enable": true,
+                    "speed": 1.0,
+                    "direction": "none",
+                    "random": true,
+                    "straight": false,
+                    "out_mode": "bounce", /* Respawns elements smoothly across boundaries */
+                    "bounce": false
+                }
+            },
+            /* Interactive settings when mouse sweeps across screen */
+            "interactivity": {
+                "detect_on": "canvas",
+                "events": {
+                    "onhover": {
+                        "enable": false,
+                        "mode": "bubble" /* Puffs up elements slightly on cursor overlap */
+                    },
+                    "onclick": {
+                        "enable": false,
+                        "mode": "push" /* Injects fresh particles on hit */
+                    },
+                    "resize": true
+                },
+                "modes": {
+                    "bubble": {
+                        "distance": 150,
+                        "size": 10,
+                        "duration": 2,
+                        "opacity": 1,
+                        "speed": 3
+                    },
+                    "push": {
+                        "particles_nb": 4
+                    }
+                }
+            },
+            "retina_detect": true
+        });
+    </script>
 </body>
 </html>

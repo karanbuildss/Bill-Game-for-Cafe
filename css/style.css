@@ -16,7 +16,7 @@ body {
   font-family: "Arial Black", Arial, sans-serif;
   background:
     linear-gradient(rgba(7, 8, 18, 0.14), rgba(7, 8, 18, 0.3)),
-    url("../assets/images/backgroundimage.png") center / cover fixed no-repeat,
+    url("../assets/images/backgroundimage.jpg") center / cover fixed no-repeat,
     #070812;
   color: #fff;
   overflow-x: hidden;
@@ -844,7 +844,7 @@ button.secondary {
   box-shadow:
     0 0 10px rgba(0, 255, 200, 0.95),
     0 0 24px rgba(0, 255, 200, 0.8),
-    0 0 36px rgba(255, 234, 0, 0.45),
+    0 0 36px rgba(92, 85, 3, 0.45),
     inset 2px 2px 4px rgba(255, 255, 255, 0.24),
     inset -2px -2px 4px rgba(0, 0, 0, 0.5);
 }
@@ -879,11 +879,11 @@ button.secondary {
   content: "";
   position: absolute;
   inset: 7px;
-  border: 2px solid rgba(255, 234, 0, 0.9);
+  border: 2px solid rgba(17, 0, 255, 0.9,0.0);
   border-radius: calc(var(--dice-size) * 0.12);
   box-shadow:
-    0 0 14px rgba(255, 234, 0, 0.72),
-    inset 0 0 16px rgba(255, 234, 0, 0.34);
+    0 0 14px rgba(255, 255, 0, 0.0),
+    inset 0 0 16px rgba(255, 234, 0, 0.0);
   pointer-events: none;
 }
 
@@ -953,7 +953,7 @@ button.secondary {
 }
 
 .dice-score-row strong {
-  color: #ffea00;
+  color: #ffe101;
   font-size: 20px;
 }
 
