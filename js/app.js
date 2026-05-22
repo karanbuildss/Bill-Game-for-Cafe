@@ -303,6 +303,7 @@ function setScreen(html) {
 function cleanupScreenEffects() {
   stopSpinWheel();
   stopDiceRollGame();
+  stopPingPongGame();
 }
 
 function savePlayers() {
@@ -382,6 +383,12 @@ function showPlayerSetup(error = "") {
       </div>
 
       <button onclick="goToGameSelect()">Continue</button>
+
+      <div class="no-name-games-card">
+        <strong>No-Name Games</strong>
+        <p>Skip player setup and play bonus arcade games that do not need saved names.</p>
+        <button class="secondary" onclick="playTap(); showBonusGames()">Open No-Name Games</button>
+      </div>
 
       ${error ? `<div class="error">${error}</div>` : ""}
     </div>
@@ -482,7 +489,7 @@ function goToGameSelect() {
   showGameSelect();
 }
 
-function showGameSelect() {
+function showGameSelect(error = "") {
   playBackgroundMusic();
   setScreen(`
     <div class="panel game-select-panel">
@@ -494,7 +501,24 @@ function showGameSelect() {
       ${gameButton("Dice Roll", "Highest dice roll pays the bill.", "showDiceRoll")}
       ${gameButton("Plinko Board", "Drop a ball and let luck decide.", "showPlinkoBoard")}
 
+      <button class="secondary no-name-link" onclick="playTap(); showBonusGames()">No-Name Games →</button>
       <button class="secondary" onclick="playTap(); showPlayerSetup()">Edit Players</button>
+      ${error ? `<div class="error">${error}</div>` : ""}
+    </div>
+  `);
+}
+
+function showBonusGames() {
+  playBackgroundMusic();
+  setScreen(`
+    <div class="panel game-select-panel bonus-games-panel">
+      <h2>No-Name Games</h2>
+      <p>Bonus arcade games that do not need player names.</p>
+
+      ${gameButton("Retro Ping Pong", "Two sides compete. Losing side pays.", "showPingPongGame")}
+      ${gameButton("Tic Tac Toe", "Classic X vs O. Losing side pays.", "showTicTacToeGame")}
+
+      <button class="secondary" onclick="playTap(); showGameSelect()">Back To Main Games</button>
     </div>
   `);
 }
@@ -506,7 +530,9 @@ function gameButton(title, desc, action) {
     showSpinWheel: "Spin Now",
     showFingerChooser: "Choose Now",
     showDiceRoll: "Roll Dice",
-    showPlinkoBoard: "Drop Ball"
+    showPlinkoBoard: "Drop Ball",
+    showPingPongGame: "Play Pong",
+    showTicTacToeGame: "Play"
   }[action] || "Open";
 
   if (action === "showSpinWheel") {
@@ -525,6 +551,14 @@ function gameButton(title, desc, action) {
     clickAction = "showPlinkoBoard()";
   }
 
+  if (action === "showPingPongGame") {
+    clickAction = "showPingPongGame()";
+  }
+
+  if (action === "showTicTacToeGame") {
+    clickAction = "showTicTacToeGame()";
+  }
+
   return `
     <div class="game-card">
       <div class="arcade-marquee">${title}</div>
@@ -541,14 +575,16 @@ function getGamePreview(action) {
     showSpinWheel: "spinwheel-card.jpg",
     showFingerChooser: "fingerchooser-card.jpg",
     showDiceRoll: "diceroll-card.jpg",
-    showPlinkoBoard: "plinkoboard-carrd.jpg"
+    showPlinkoBoard: "plinkoboard-carrd.jpg",
+    showPingPongGame: "pingpong-card.png",
+    showTicTacToeGame: "tictactoe-card.png"
   };
 
   const imageName = previewImages[action];
 
   if (!imageName) return "";
 
-  return `<img src="assets/images/${imageName}" alt="" aria-hidden="true">`;
+  return `<img src="assets/images/${imageName}" alt="" aria-hidden="true" onerror="this.style.display='none'">`;
 }
 
 
@@ -597,6 +633,16 @@ function playAgain() {
 
   if (lastPlayedGame === "Plinko Board") {
     showPlinkoBoard();
+    return;
+  }
+
+  if (lastPlayedGame === "Retro Ping Pong") {
+    showPingPongGame();
+    return;
+  }
+
+  if (lastPlayedGame === "Tic Tac Toe") {
+    showTicTacToeGame();
     return;
   }
 
@@ -1714,6 +1760,554 @@ function getPlinkoGeometry() {
     gravity: clampValue(centerDistance * 0.008, 0.16, 0.24),
     maxFallSpeed: clampValue(centerDistance * 0.008, 2.8, 4.6)
   };
+}
+
+let pingPongCanvas = null;
+let pingPongCtx = null;
+let pingPongAnimationFrame = null;
+let pingPongRunning = false;
+let pingPongWaitingForServe = true;
+let pingPongKeys = new Set();
+let pingPongTouches = new Map();
+const pingPongScoreLimit = 5;
+const pingPongStartSpeed = 4.7;
+const pingPongMaxSpeed = 7.4;
+const pingPongSpeedIncrease = 0.18;
+const pingPongState = {
+  leftScore: 0,
+  rightScore: 0,
+  left: { x: 24, y: 160, width: 16, height: 96, speed: 8 },
+  right: { x: 360, y: 160, width: 16, height: 96, speed: 8 },
+  ball: { x: 200, y: 180, radius: 9, vx: 5, vy: 3, speed: 5 },
+  message: "Press Serve"
+};
+
+function showPingPongGame() {
+  playGameBackgroundMusic();
+  stopPingPongGame();
+
+  setScreen(`
+    <div class="panel pingpong-panel">
+      <h2>Retro Ping Pong</h2>
+      <p>Left Player vs Right Player | First to ${pingPongScoreLimit}. Losing side pays.</p>
+
+      <canvas id="pingPongCanvas" aria-label="Retro two player ping pong game"></canvas>
+
+      <div class="pingpong-controls">
+        <button id="pingPongServeBtn" onclick="servePingPong()">Serve</button>
+        <button class="secondary" onclick="playTap(); resetPingPongGame()">Reset</button>
+      </div>
+      <button class="secondary" onclick="playTap(); stopPingPongGame(); showGameSelect()">Back</button>
+    </div>
+  `);
+
+  pingPongCanvas = document.getElementById("pingPongCanvas");
+  pingPongCtx = pingPongCanvas.getContext("2d");
+  setupPingPongCanvas();
+  resetPingPongGame(false);
+
+  window.addEventListener("keydown", handlePingPongKeyDown);
+  window.addEventListener("keyup", handlePingPongKeyUp);
+  window.addEventListener("resize", resizePingPongGame);
+  pingPongCanvas.addEventListener("pointerdown", handlePingPongPointer);
+  pingPongCanvas.addEventListener("pointermove", handlePingPongPointer);
+  pingPongCanvas.addEventListener("pointerup", clearPingPongPointer);
+  pingPongCanvas.addEventListener("pointercancel", clearPingPongPointer);
+  pingPongCanvas.addEventListener("pointerleave", clearPingPongPointer);
+  pingPongCanvas.addEventListener("lostpointercapture", clearPingPongPointer);
+  window.addEventListener("pointerup", clearPingPongPointer);
+  window.addEventListener("pointercancel", clearPingPongPointer);
+  window.addEventListener("blur", clearPingPongControls);
+}
+
+function resizePingPongGame() {
+  if (!pingPongCanvas || !pingPongCtx) return;
+
+  setupPingPongCanvas();
+  drawPingPong();
+}
+
+function setupPingPongCanvas() {
+  const rect = pingPongCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  pingPongCanvas.width = rect.width * dpr;
+  pingPongCanvas.height = rect.height * dpr;
+  pingPongCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  syncPingPongSizes(true);
+}
+
+function syncPingPongSizes(resetPositions = false) {
+  const width = pingPongCanvas.clientWidth;
+  const height = pingPongCanvas.clientHeight;
+  const paddleWidth = clampValue(width * 0.024, 11, 18);
+  const paddleHeight = clampValue(height * 0.2, 68, 112);
+  const edgeGap = clampValue(width * 0.032, 13, 26);
+
+  pingPongState.left.width = paddleWidth;
+  pingPongState.left.height = paddleHeight;
+  pingPongState.left.speed = clampValue(height * 0.016, 5.5, 9);
+  pingPongState.left.x = edgeGap;
+
+  pingPongState.right.width = paddleWidth;
+  pingPongState.right.height = paddleHeight;
+  pingPongState.right.speed = pingPongState.left.speed;
+  pingPongState.right.x = width - edgeGap - paddleWidth;
+
+  pingPongState.ball.radius = clampValue(width * 0.014, 7, 11);
+
+  if (resetPositions) {
+    pingPongState.left.y = height / 2 - paddleHeight / 2;
+    pingPongState.right.y = height / 2 - paddleHeight / 2;
+    pingPongState.ball.x = width / 2;
+    pingPongState.ball.y = height / 2;
+  }
+}
+
+function resetPingPongGame(playSound = true) {
+  if (playSound) playTap();
+  pingPongState.leftScore = 0;
+  pingPongState.rightScore = 0;
+  pingPongState.message = "Press Serve";
+  pingPongRunning = false;
+  pingPongWaitingForServe = true;
+  resetPingPongBall(Math.random() > 0.5 ? 1 : -1);
+  updatePingPongButton("Serve");
+  drawPingPong();
+}
+
+function resetPingPongBall(direction) {
+  const width = pingPongCanvas.clientWidth;
+  const height = pingPongCanvas.clientHeight;
+  syncPingPongSizes(true);
+  pingPongState.ball.x = width / 2;
+  pingPongState.ball.y = height / 2;
+  pingPongState.ball.speed = pingPongStartSpeed;
+  setPingPongBallVelocity(direction, plinkoRandomBetween(-0.35, 0.35));
+}
+
+function servePingPong() {
+  playTap();
+  if (pingPongState.leftScore >= pingPongScoreLimit || pingPongState.rightScore >= pingPongScoreLimit) {
+    resetPingPongGame(false);
+  }
+
+  pingPongRunning = true;
+  pingPongWaitingForServe = false;
+  pingPongState.message = "";
+  updatePingPongButton("Playing");
+  cancelAnimationFrame(pingPongAnimationFrame);
+  pingPongAnimationFrame = requestAnimationFrame(loopPingPong);
+}
+
+function loopPingPong() {
+  updatePingPong();
+  drawPingPong();
+
+  if (pingPongRunning) {
+    pingPongAnimationFrame = requestAnimationFrame(loopPingPong);
+  }
+}
+
+function updatePingPong() {
+  const width = pingPongCanvas.clientWidth;
+  const height = pingPongCanvas.clientHeight;
+  const { left, right, ball } = pingPongState;
+
+  movePingPongPaddles();
+  left.y = clampValue(left.y, 0, height - left.height);
+  right.y = clampValue(right.y, 0, height - right.height);
+
+  if (pingPongWaitingForServe) return;
+
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+
+  if (ball.y - ball.radius <= 0 || ball.y + ball.radius >= height) {
+    ball.vy *= -1;
+    ball.y = clampValue(ball.y, ball.radius, height - ball.radius);
+    playTone(210, 0.04, 0.07, "triangle");
+  }
+
+  if (pingPongHitsPaddle(ball, left) && ball.vx < 0) {
+    bouncePingPongBall(ball, left, 1);
+  }
+
+  if (pingPongHitsPaddle(ball, right) && ball.vx > 0) {
+    bouncePingPongBall(ball, right, -1);
+  }
+
+  if (ball.x - ball.radius <= 0) {
+    pingPongState.rightScore += 1;
+    finishPingPongPoint(-1);
+  }
+
+  if (ball.x + ball.radius >= width) {
+    pingPongState.leftScore += 1;
+    finishPingPongPoint(1);
+  }
+}
+
+function movePingPongPaddles() {
+  const width = pingPongCanvas.clientWidth;
+
+  if (pingPongKeys.has("w")) pingPongState.left.y -= pingPongState.left.speed;
+  if (pingPongKeys.has("s")) pingPongState.left.y += pingPongState.left.speed;
+  if (pingPongKeys.has("arrowup")) pingPongState.right.y -= pingPongState.right.speed;
+  if (pingPongKeys.has("arrowdown")) pingPongState.right.y += pingPongState.right.speed;
+
+  pingPongTouches.forEach(touch => {
+    const paddle = touch.x < width / 2 ? pingPongState.left : pingPongState.right;
+    paddle.y += (touch.y - (paddle.y + paddle.height / 2)) * 0.24;
+  });
+}
+
+function pingPongHitsPaddle(ball, paddle) {
+  return (
+    ball.x + ball.radius > paddle.x &&
+    ball.x - ball.radius < paddle.x + paddle.width &&
+    ball.y + ball.radius > paddle.y &&
+    ball.y - ball.radius < paddle.y + paddle.height
+  );
+}
+
+function bouncePingPongBall(ball, paddle, direction) {
+  const hitPosition = (ball.y - (paddle.y + paddle.height / 2)) / (paddle.height / 2);
+  ball.speed = Math.min(ball.speed + pingPongSpeedIncrease, pingPongMaxSpeed);
+  setPingPongBallVelocity(direction, clampValue(hitPosition, -1, 1) * 0.82);
+  ball.x = direction > 0 ? paddle.x + paddle.width + ball.radius : paddle.x - ball.radius;
+  playTone(560 + Math.random() * 120, 0.05, 0.1, "square");
+}
+
+function setPingPongBallVelocity(direction, angle) {
+  const speed = pingPongState.ball.speed;
+  pingPongState.ball.vx = Math.cos(angle) * speed * direction;
+  pingPongState.ball.vy = Math.sin(angle) * speed;
+}
+
+function finishPingPongPoint(direction) {
+  pingPongRunning = false;
+  pingPongWaitingForServe = true;
+  cancelAnimationFrame(pingPongAnimationFrame);
+
+  if (pingPongState.leftScore >= pingPongScoreLimit || pingPongState.rightScore >= pingPongScoreLimit) {
+    const winnerIndex = pingPongState.leftScore > pingPongState.rightScore ? 0 : 1;
+    const payer = winnerIndex === 0 ? "Right Player" : "Left Player";
+    pingPongState.message = `${payer} pays!`;
+    updatePingPongButton("Continue");
+    playVictorySound();
+    drawPingPong();
+    document.getElementById("pingPongServeBtn").onclick = function () {
+      playTap();
+      showResult(payer, "Retro Ping Pong");
+    };
+    return;
+  }
+
+  resetPingPongBall(direction);
+  pingPongState.message = direction > 0 ? "Left Player scored. Serve" : "Right Player scored. Serve";
+  updatePingPongButton("Serve");
+  playTone(160, 0.09, 0.09, "sawtooth");
+  setTimeout(() => playTone(115, 0.1, 0.07, "sawtooth"), 75);
+  drawPingPong();
+}
+
+function drawPingPong() {
+  if (!pingPongCtx || !pingPongCanvas) return;
+
+  const width = pingPongCanvas.clientWidth;
+  const height = pingPongCanvas.clientHeight;
+  pingPongCtx.clearRect(0, 0, width, height);
+
+  pingPongCtx.fillStyle = "#050044";
+  pingPongCtx.fillRect(0, 0, width, height);
+  drawPingPongCenterLine(width, height);
+  drawPingPongScores(width);
+  drawPingPongPaddle(pingPongState.left);
+  drawPingPongPaddle(pingPongState.right);
+  drawPingPongBall();
+
+  if (pingPongState.message) {
+    drawPingPongMessage(width, height, pingPongState.message);
+  }
+
+  drawPingPongBorder(width, height);
+}
+
+function drawPingPongCenterLine(width, height) {
+  pingPongCtx.fillStyle = "#ffea00";
+  const dashHeight = Math.max(20, height / 12);
+  const dashWidth = 10;
+
+  for (let y = -dashHeight; y < height + dashHeight; y += dashHeight * 1.75) {
+    pingPongCtx.fillRect(width / 2 - dashWidth / 2, y, dashWidth, dashHeight);
+  }
+}
+
+function drawPingPongScores(width) {
+  pingPongCtx.fillStyle = "#ffffff";
+  pingPongCtx.font = `900 ${Math.max(34, Math.min(64, width / 8))}px Arial`;
+  pingPongCtx.textAlign = "center";
+  pingPongCtx.textBaseline = "top";
+  pingPongCtx.fillText(pingPongState.leftScore, width / 2 - width * 0.1, 14);
+  pingPongCtx.fillText(pingPongState.rightScore, width / 2 + width * 0.1, 14);
+}
+
+function drawPingPongPaddle(paddle) {
+  pingPongCtx.save();
+  pingPongCtx.fillStyle = "#ffffff";
+  pingPongCtx.shadowColor = "#ffffff";
+  pingPongCtx.shadowBlur = 12;
+  drawRoundRect(pingPongCtx, paddle.x, paddle.y, paddle.width, paddle.height, Math.min(12, paddle.width));
+  pingPongCtx.fill();
+  pingPongCtx.restore();
+}
+
+function drawPingPongBall() {
+  const { ball } = pingPongState;
+  const x = Math.round(ball.x);
+  const y = Math.round(ball.y);
+  const radius = Math.round(ball.radius);
+
+  pingPongCtx.save();
+  pingPongCtx.shadowColor = "rgba(0, 255, 200, 0.75)";
+  pingPongCtx.shadowBlur = radius * 0.05;
+  pingPongCtx.beginPath();
+  pingPongCtx.arc(x, y, radius, 0, Math.PI * 2);
+  pingPongCtx.fill();
+
+  pingPongCtx.shadowBlur = 0;
+  pingPongCtx.fillStyle = "#ffffff";
+  pingPongCtx.beginPath();
+  pingPongCtx.arc(x, y, radius * 0.82, 0, Math.PI * 2);
+  pingPongCtx.fill();
+
+  pingPongCtx.fillStyle = "rgba(0, 255, 200, 0.32)";
+  pingPongCtx.beginPath();
+  pingPongCtx.arc(x - radius * 0.28, y - radius * 0.28, radius * 0.3, 0, Math.PI * 2);
+  pingPongCtx.fill();
+  pingPongCtx.restore();
+}
+
+function drawPingPongMessage(width, height, text) {
+  pingPongCtx.save();
+  pingPongCtx.fillStyle = "rgba(45, 45, 92, 0.92)";
+  const boxWidth = Math.min(width - 26, 360);
+  const boxHeight = 58;
+  const x = width / 2 - boxWidth / 2;
+  const y = height / 2 - boxHeight / 2;
+  pingPongCtx.fillRect(x, y, boxWidth, boxHeight);
+  pingPongCtx.fillStyle = "#ffffff";
+  pingPongCtx.font = `900 ${Math.min(24, width / 18)}px Arial`;
+  pingPongCtx.textAlign = "center";
+  pingPongCtx.textBaseline = "middle";
+  pingPongCtx.fillText(text, width / 2, height / 2);
+  pingPongCtx.restore();
+}
+
+function drawPingPongBorder(width, height) {
+  pingPongCtx.save();
+  pingPongCtx.strokeStyle = "#00ffc8";
+  pingPongCtx.lineWidth = 7;
+  pingPongCtx.strokeRect(3.5, 3.5, width - 7, height - 7);
+  pingPongCtx.strokeStyle = "#ffea00";
+  pingPongCtx.lineWidth = 4;
+  pingPongCtx.strokeRect(2, 2, width - 4, height - 4);
+  pingPongCtx.restore();
+}
+
+function updatePingPongButton(label) {
+  const button = document.getElementById("pingPongServeBtn");
+  if (!button) return;
+
+  button.textContent = label;
+  button.disabled = label === "Playing";
+  if (label !== "Continue") {
+    button.onclick = servePingPong;
+  }
+}
+
+function handlePingPongKeyDown(event) {
+  if (["w", "s", "ArrowUp", "ArrowDown"].includes(event.key)) {
+    event.preventDefault();
+  }
+
+  pingPongKeys.add(event.key.toLowerCase());
+}
+
+function handlePingPongKeyUp(event) {
+  if (["w", "s", "ArrowUp", "ArrowDown"].includes(event.key)) {
+    event.preventDefault();
+  }
+
+  pingPongKeys.delete(event.key.toLowerCase());
+}
+
+function handlePingPongPointer(event) {
+  if (!pingPongCanvas) return;
+
+  event.preventDefault();
+
+  if (event.type === "pointermove" && !pingPongTouches.has(event.pointerId)) return;
+
+  if (event.type === "pointerdown") {
+    pingPongCanvas.setPointerCapture(event.pointerId);
+  }
+
+  const rect = pingPongCanvas.getBoundingClientRect();
+  pingPongTouches.set(event.pointerId, {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
+  });
+}
+
+function clearPingPongPointer(event) {
+  pingPongTouches.delete(event.pointerId);
+}
+
+function clearPingPongControls() {
+  pingPongKeys.clear();
+  pingPongTouches.clear();
+}
+
+function stopPingPongGame() {
+  if (pingPongAnimationFrame) {
+    cancelAnimationFrame(pingPongAnimationFrame);
+    pingPongAnimationFrame = null;
+  }
+
+  window.removeEventListener("keydown", handlePingPongKeyDown);
+  window.removeEventListener("keyup", handlePingPongKeyUp);
+  window.removeEventListener("resize", resizePingPongGame);
+  window.removeEventListener("pointerup", clearPingPongPointer);
+  window.removeEventListener("pointercancel", clearPingPongPointer);
+  window.removeEventListener("blur", clearPingPongControls);
+  pingPongRunning = false;
+  pingPongWaitingForServe = true;
+  clearPingPongControls();
+}
+
+let ticTacToeBoard = Array(9).fill("");
+let ticTacToeCurrentPlayer = "X";
+let ticTacToeStartingPlayer = "X";
+let ticTacToeGameOver = false;
+const ticTacToeWinningLines = [
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+  [0, 3, 6],
+  [1, 4, 7],
+  [2, 5, 8],
+  [0, 4, 8],
+  [2, 4, 6]
+];
+
+function showTicTacToeGame() {
+  playGameBackgroundMusic();
+  ticTacToeBoard = Array(9).fill("");
+  ticTacToeCurrentPlayer = ticTacToeStartingPlayer;
+  ticTacToeGameOver = false;
+
+  setScreen(`
+    <div class="panel tictactoe-panel">
+      <h2>Tic Tac Toe</h2>
+      <p>No names needed. Player X vs Player O.</p>
+
+      <div id="ticTacToeStatus" class="tictactoe-status">Player ${ticTacToeCurrentPlayer} starts</div>
+      <div id="ticTacToeBoard" class="tictactoe-board"></div>
+
+      <div class="tictactoe-controls">
+        <button onclick="playTap(); resetTicTacToeGame()">Reset</button>
+        <button class="secondary" onclick="playTap(); swapTicTacToeStart()">Swap Start</button>
+      </div>
+      <button class="secondary" onclick="playTap(); showBonusGames()">Back</button>
+    </div>
+  `);
+
+  renderTicTacToeBoard();
+}
+
+function renderTicTacToeBoard(winLine = []) {
+  const board = document.getElementById("ticTacToeBoard");
+  if (!board) return;
+
+  board.innerHTML = ticTacToeBoard.map((value, index) => `
+    <button
+      class="tictactoe-cell ${value.toLowerCase()} ${winLine.includes(index) ? "win" : ""}"
+      type="button"
+      onclick="playTicTacToeCell(${index})"
+      aria-label="Cell ${index + 1}"
+    >${value}</button>
+  `).join("");
+}
+
+function playTicTacToeCell(index) {
+  if (ticTacToeGameOver || ticTacToeBoard[index]) return;
+
+  ticTacToeBoard[index] = ticTacToeCurrentPlayer;
+  playTone(ticTacToeCurrentPlayer === "X" ? 520 : 360, 0.06, 0.08, "triangle");
+
+  const winLine = getTicTacToeWinningLine();
+
+  if (winLine) {
+    finishTicTacToeWin(winLine);
+    return;
+  }
+
+  if (ticTacToeBoard.every(Boolean)) {
+    ticTacToeGameOver = true;
+    updateTicTacToeStatus("Draw. Play again!");
+    playTone(180, 0.12, 0.08, "sawtooth");
+    renderTicTacToeBoard();
+    return;
+  }
+
+  ticTacToeCurrentPlayer = ticTacToeCurrentPlayer === "X" ? "O" : "X";
+  updateTicTacToeStatus(`Player ${ticTacToeCurrentPlayer}'s turn`);
+  renderTicTacToeBoard();
+}
+
+function getTicTacToeWinningLine() {
+  return ticTacToeWinningLines.find(line => {
+    const [a, b, c] = line;
+    return ticTacToeBoard[a] && ticTacToeBoard[a] === ticTacToeBoard[b] && ticTacToeBoard[a] === ticTacToeBoard[c];
+  });
+}
+
+function finishTicTacToeWin(winLine) {
+  ticTacToeGameOver = true;
+  const loser = ticTacToeCurrentPlayer === "X" ? "Player O" : "Player X";
+  updateTicTacToeStatus(`${loser} pays!`);
+  renderTicTacToeBoard(winLine);
+  playVictorySound();
+
+  const panel = document.querySelector(".tictactoe-panel");
+  if (!panel) return;
+
+  const continueButton = document.createElement("button");
+  continueButton.textContent = "Continue";
+  continueButton.onclick = function () {
+    playTap();
+    showResult(loser, "Tic Tac Toe");
+  };
+  panel.querySelector(".tictactoe-controls").after(continueButton);
+}
+
+function updateTicTacToeStatus(message) {
+  const status = document.getElementById("ticTacToeStatus");
+  if (status) status.textContent = message;
+}
+
+function resetTicTacToeGame() {
+  ticTacToeBoard = Array(9).fill("");
+  ticTacToeCurrentPlayer = ticTacToeStartingPlayer;
+  ticTacToeGameOver = false;
+  updateTicTacToeStatus(`Player ${ticTacToeCurrentPlayer} starts`);
+  renderTicTacToeBoard();
+}
+
+function swapTicTacToeStart() {
+  ticTacToeStartingPlayer = ticTacToeStartingPlayer === "X" ? "O" : "X";
+  resetTicTacToeGame();
 }
 
 function clampValue(value, min, max) {

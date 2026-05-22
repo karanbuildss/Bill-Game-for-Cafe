@@ -229,6 +229,20 @@ button.secondary {
   text-shadow: 0 2px 0 #000, 0 0 10px rgba(0, 255, 200, 0.7);
 }
 
+.bonus-games-panel .game-card {
+  grid-column: 1 / -1;
+  max-width: 300px;
+  justify-self: center;
+}
+
+.no-name-link {
+  grid-column: 1 / -1;
+  max-width: 360px;
+  justify-self: center;
+  color: #ffea00;
+  border-color: rgba(255, 234, 0, 0.58);
+}
+
 .game-select-panel {
   width: min(620px, calc(100vw - 36px));
 }
@@ -307,11 +321,13 @@ button.secondary {
 .setup-panel {
   justify-self: center;
   align-self: center;
-  height: min(680px, calc(100dvh - 36px));
+  height: auto;
+  min-height: min(620px, calc(100dvh - 36px));
   max-height: calc(100dvh - 36px);
   display: flex;
   flex-direction: column;
   margin: 0 auto;
+  overflow-y: auto;
 }
 
 .player-summary {
@@ -376,7 +392,7 @@ button.secondary {
 }
 
 .active-player-card {
-  margin-top: auto;
+  margin-top: 10px;
   margin-bottom: 14px;
   padding: 16px;
   border-radius: 22px;
@@ -413,6 +429,67 @@ button.secondary {
 
 .setup-actions button:only-child {
   grid-column: 1 / -1;
+}
+
+.no-name-games-card {
+  flex: 0 0 auto;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(0, 255, 200, 0.14), rgba(255, 61, 242, 0.16)),
+    rgba(5, 6, 12, 0.32);
+  border: 2px solid rgba(255, 234, 0, 0.38);
+  text-align: center;
+}
+
+.no-name-games-card strong {
+  display: block;
+  color: #ffea00;
+  font-size: 16px;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(255, 234, 0, 0.4);
+}
+
+.no-name-games-card p {
+  margin: 6px auto 8px;
+  color: rgba(255, 255, 255, 0.86);
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.no-name-games-card button {
+  min-height: 42px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+@media (max-height: 760px) {
+  .setup-panel {
+    gap: 8px;
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+
+  .player-summary {
+    min-height: 62px;
+    max-height: 92px;
+    margin-bottom: 8px;
+  }
+
+  .active-player-card {
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+
+  .active-player-card input {
+    min-height: 54px;
+  }
+
+  .no-name-games-card {
+    padding: 10px;
+  }
 }
 
 @media (max-height: 720px){
@@ -1069,6 +1146,144 @@ button.secondary {
 
 .plinko-panel button {
   flex: 0 0 auto;
+}
+
+.pingpong-panel {
+  width: min(760px, calc(100vw - 36px));
+  max-height: calc(100dvh - 28px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pingpong-panel p {
+  margin-bottom: 10px;
+  font-size: clamp(12px, 2.6vw, 15px);
+}
+
+#pingPongCanvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  min-height: 230px;
+  max-height: 52dvh;
+  border: 0;
+  background: #050044;
+  box-shadow:
+    0 0 0 3px rgba(255, 61, 242, 0.8),
+    0 0 28px rgba(0, 255, 200, 0.28);
+  touch-action: none;
+}
+
+.pingpong-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tictactoe-panel {
+  width: min(430px, calc(100vw - 36px));
+}
+
+.tictactoe-status {
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  margin: 10px 0 16px;
+  padding: 10px;
+  border-radius: 14px;
+  color: #00ffc8;
+  background: rgba(0, 255, 200, 0.08);
+  text-align: center;
+  font-size: clamp(17px, 4vw, 22px);
+  font-weight: 900;
+  text-shadow: 0 0 16px rgba(0, 255, 200, 0.45);
+}
+
+.tictactoe-board {
+  width: min(318px, 100%);
+  height: min(318px, calc(100vw - 76px));
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 10px;
+  padding: 10px;
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 61, 242, 0.18), transparent 42%),
+    #07091a;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 30px rgba(0, 255, 200, 0.12);
+}
+
+.tictactoe-cell {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  justify-content: center;
+  margin: 0;
+  border: 3px solid rgba(0, 255, 210, 0.68);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #163b4a, #142138);
+  color: #ffffff;
+  font-size: clamp(46px, 16vw, 76px);
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  box-shadow:
+    inset 0 -5px 0 rgba(0, 0, 0, 0.24),
+    0 0 16px rgba(0, 255, 200, 0.18);
+}
+
+.tictactoe-cell.x,
+.tictactoe-cell.o {
+  padding-bottom: 0.08em;
+}
+
+.tictactoe-cell.x {
+  color: #00ffc8;
+  text-shadow: 0 0 18px rgba(0, 255, 200, 0.8);
+}
+
+.tictactoe-cell.o {
+  color: #ffea00;
+  text-shadow: 0 0 18px rgba(255, 234, 0, 0.8);
+}
+
+.tictactoe-cell.win {
+  border-color: #ff3df2;
+  animation: ticTacToeWinnerPulse 520ms ease-in-out infinite alternate;
+}
+
+.tictactoe-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+@keyframes ticTacToeWinnerPulse {
+  from {
+    transform: scale(1);
+    box-shadow: 0 0 18px rgba(255, 61, 242, 0.46);
+  }
+
+  to {
+    transform: scale(1.05);
+    box-shadow: 0 0 34px rgba(255, 61, 242, 0.76);
+  }
+}
+
+@media (max-width: 620px) and (orientation: portrait) {
+  #pingPongCanvas {
+    aspect-ratio: 10 / 13;
+    max-height: 56dvh;
+  }
 }
 
 @media (max-height: 720px) {
